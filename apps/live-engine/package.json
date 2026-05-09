@@ -1,0 +1,9 @@
+{
+  "name": "live-engine",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "mkdir -p dist && echo 'Live Engine' > dist/index.html",
+    "dev": "echo 'Running live-engine dev server...'"
+  }
+}

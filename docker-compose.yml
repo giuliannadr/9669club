@@ -1,0 +1,57 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - av-internal-net
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  web-portfolio:
+    build:
+      context: .
+      dockerfile: apps/web-portfolio/Dockerfile
+    ports:
+      - "3000:3000"
+    networks:
+      - av-public-net
+      - av-internal-net
+    environment:
+      - NODE_ENV=production
+
+  admin-dashboard:
+    build:
+      context: .
+      dockerfile: apps/admin-dashboard/Dockerfile
+    ports:
+      - "3001:80"
+    networks:
+      - av-internal-net
+      - av-public-net
+    environment:
+      - REDIS_URL=redis://redis:6379
+
+  live-engine:
+    build:
+      context: .
+      dockerfile: apps/live-engine/Dockerfile
+    ports:
+      - "3002:80"
+    networks:
+      - av-internal-net
+      - av-public-net
+    environment:
+      - NEXT_PUBLIC_LIVEKIT_URL=${NEXT_PUBLIC_LIVEKIT_URL}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - REDIS_URL=redis://redis:6379
+
+networks:
+  av-internal-net:
+    internal: true
+  av-public-net:
+
+volumes:
+  redis_data:
