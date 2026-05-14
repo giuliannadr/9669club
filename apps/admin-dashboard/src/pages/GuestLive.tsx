@@ -1,104 +1,162 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { Camera, Mic, Video, VideoOff, MicOff, AlertCircle, Circle } from 'lucide-react';
+import { Camera, Video, AlertCircle } from 'lucide-react';
+import {
+  Room,
+  RoomEvent,
+  LocalVideoTrack,
+  LocalAudioTrack,
+  createLocalTracks,
+  Track,
+} from 'livekit-client';
+
+const TOKEN_API_URL = import.meta.env.VITE_TOKEN_API_URL ?? '';
+const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 const GuestLive: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [hasPermissions, setHasPermissions] = useState<boolean | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
+  const [isLive, setIsLive] = useState(false);
+  const [liveTime, setLiveTime] = useState(0);
   const [showPermissionModal, setShowPermissionModal] = useState(true);
-  
+  const [error, setError] = useState<string | null>(null);
+  const [signalBars, setSignalBars] = useState(4);
+
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const roomRef = useRef<Room | null>(null);
+  const localVideoRef = useRef<LocalVideoTrack | null>(null);
+  const localAudioRef = useRef<LocalAudioTrack | null>(null);
   const guestId = useRef(`guest_${Math.random().toString(36).substring(2, 9)}`);
 
-  // Formatear tiempo en MM:SS
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60).toString().padStart(2, '0');
+    return `${m}:${(s % 60).toString().padStart(2, '0')}`;
   };
 
   useEffect(() => {
     let interval: number;
-    if (isRecording) {
-      interval = setInterval(() => setRecordingTime(t => t + 1), 1000);
+    if (isLive) {
+      interval = setInterval(() => setLiveTime(t => t + 1), 1000);
     } else {
-      setRecordingTime(0);
+      setLiveTime(0);
     }
     return () => clearInterval(interval);
-  }, [isRecording]);
+  }, [isLive]);
 
-  // Request Permissions
+  // Animate signal bars when live
+  useEffect(() => {
+    if (!isLive) return;
+    const interval = setInterval(() => {
+      setSignalBars(Math.floor(Math.random() * 2) + 3); // 3 or 4
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [isLive]);
+
   const requestPermissions = async () => {
+    setError(null);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, // Prefer back camera
-        audio: true
+      const tracks = await createLocalTracks({
+        video: { facingMode: 'environment', resolution: { width: 1280, height: 720 } },
+        audio: true,
       });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+
+      for (const track of tracks) {
+        if (track.kind === Track.Kind.Video) {
+          localVideoRef.current = track as LocalVideoTrack;
+          if (videoRef.current) {
+            (track as LocalVideoTrack).attach(videoRef.current);
+          }
+        }
+        if (track.kind === Track.Kind.Audio) {
+          localAudioRef.current = track as LocalAudioTrack;
+        }
       }
+
       setHasPermissions(true);
       setShowPermissionModal(false);
-    } catch (err) {
-      console.error('Error accessing media devices.', err);
+    } catch {
       setHasPermissions(false);
     }
   };
 
-  const toggleRecording = () => {
-    if (!isRecording) {
-      console.log('Iniciando transmisión WebRTC al servidor para la sala:', roomId);
-      localStorage.setItem('AV_STREAM_JOIN', JSON.stringify({
-        roomId,
-        guestId: guestId.current,
-        timestamp: Date.now()
-      }));
-      setIsRecording(true);
-    } else {
-      console.log('Cortando transmisión WebRTC');
-      localStorage.setItem('AV_STREAM_LEAVE', JSON.stringify({
-        roomId,
-        guestId: guestId.current,
-        timestamp: Date.now()
-      }));
-      setIsRecording(false);
+  const startLive = async () => {
+    if (!LIVEKIT_URL) {
+      setError('LiveKit no está configurado. Contactá al administrador.');
+      return;
+    }
+    setError(null);
+    try {
+      const res = await fetch(`${TOKEN_API_URL}/api/livekit-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, identity: guestId.current, role: 'guest' }),
+      });
+
+      if (!res.ok) throw new Error('No se pudo obtener el token');
+      const { token } = await res.json();
+
+      const room = new Room({ adaptiveStream: true, dynacast: true });
+      roomRef.current = room;
+
+      room.on(RoomEvent.Disconnected, () => {
+        setIsLive(false);
+      });
+
+      await room.connect(LIVEKIT_URL, token);
+
+      if (localVideoRef.current) {
+        await room.localParticipant.publishTrack(localVideoRef.current);
+      }
+      if (localAudioRef.current) {
+        await room.localParticipant.publishTrack(localAudioRef.current);
+      }
+
+      setIsLive(true);
+    } catch (err) {
+      setError('No se pudo conectar. Verificá tu conexión e intentá de nuevo.');
+      console.error(err);
     }
   };
 
-  // Cleanup & BeforeUnload
+  const stopLive = async () => {
+    if (roomRef.current) {
+      roomRef.current.disconnect();
+      roomRef.current = null;
+    }
+    setIsLive(false);
+  };
+
+  const handleToggle = () => {
+    if (isLive) {
+      stopLive();
+    } else {
+      startLive();
+    }
+  };
+
   useEffect(() => {
     const handleUnload = () => {
-      if (isRecording) {
-        localStorage.setItem('AV_STREAM_LEAVE', JSON.stringify({
-          roomId,
-          guestId: guestId.current,
-          timestamp: Date.now()
-        }));
-      }
+      roomRef.current?.disconnect();
     };
     window.addEventListener('beforeunload', handleUnload);
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+      roomRef.current?.disconnect();
+      localVideoRef.current?.stop();
+      localAudioRef.current?.stop();
     };
-  }, [isRecording, roomId]);
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col font-sans overflow-hidden">
-      {/* Viewport for Camera */}
+      {/* Camera Viewport */}
       <div className="absolute inset-0 bg-neutral-900 flex items-center justify-center">
         {hasPermissions ? (
-          <video 
+          <video
             ref={videoRef}
-            autoPlay 
-            playsInline 
-            muted 
+            autoPlay
+            playsInline
+            muted
             className="w-full h-full object-cover"
           />
         ) : (
@@ -107,15 +165,13 @@ const GuestLive: React.FC = () => {
             <p className="font-bold tracking-widest uppercase text-sm">Cámara Inactiva</p>
           </div>
         )}
-        
-        {/* Pro Camera Framing Corners */}
+
         {hasPermissions && (
           <div className="absolute inset-6 pointer-events-none opacity-40 mix-blend-overlay">
             <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-white/80" />
             <div className="absolute top-0 right-0 w-8 h-8 border-t-2 border-r-2 border-white/80" />
             <div className="absolute bottom-0 left-0 w-8 h-8 border-b-2 border-l-2 border-white/80" />
             <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-white/80" />
-            {/* Center Crosshair */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center opacity-30">
               <div className="w-4 h-[1px] bg-white absolute" />
               <div className="w-[1px] h-4 bg-white absolute" />
@@ -126,18 +182,18 @@ const GuestLive: React.FC = () => {
 
       {/* Overlay UI */}
       <div className="relative z-10 flex flex-col h-full pointer-events-none">
-        
         {/* Header */}
         <div className="flex items-start justify-between p-6 bg-gradient-to-b from-black/80 to-transparent pb-12 pointer-events-auto">
           <div>
-            <h1 className="text-xl font-black tracking-tight drop-shadow-md">LIVE<span className="text-orange-500">CONTROL</span></h1>
+            <h1 className="text-xl font-black tracking-tight drop-shadow-md">
+              LIVE<span className="text-orange-500">CONTROL</span>
+            </h1>
             <p className="text-xs font-bold text-neutral-300 drop-shadow uppercase tracking-widest opacity-80 mt-1">
               SALA: {roomId?.split('_')[1] || roomId}
             </p>
           </div>
 
-          {/* Status Indicator */}
-          {isRecording && (
+          {isLive && (
             <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 shadow-xl">
               <div className="flex items-center gap-1.5 text-rose-500 font-black text-[10px] tracking-widest uppercase">
                 <div className="w-2 h-2 bg-rose-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(243,24,63,0.8)]" />
@@ -145,15 +201,17 @@ const GuestLive: React.FC = () => {
               </div>
               <div className="w-px h-3 bg-white/20" />
               <div className="text-white font-mono text-xs font-bold tracking-wider">
-                {formatTime(recordingTime)}
+                {formatTime(liveTime)}
               </div>
               <div className="w-px h-3 bg-white/20" />
-              {/* Signal Bars */}
               <div className="flex items-end gap-[2px] h-3">
-                <div className="w-1 h-1.5 bg-green-500 rounded-sm" />
-                <div className="w-1 h-2 bg-green-500 rounded-sm" />
-                <div className="w-1 h-2.5 bg-green-500 rounded-sm" />
-                <div className="w-1 h-3 bg-green-500 rounded-sm animate-pulse" />
+                {[1, 2, 3, 4].map(i => (
+                  <div
+                    key={i}
+                    className={`w-1 rounded-sm transition-all duration-300 ${i <= signalBars ? 'bg-green-500' : 'bg-white/20'}`}
+                    style={{ height: `${i * 25}%` }}
+                  />
+                ))}
               </div>
             </div>
           )}
@@ -163,32 +221,36 @@ const GuestLive: React.FC = () => {
 
         {/* Footer Controls */}
         <div className="flex flex-col items-center justify-end p-8 bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-24 pointer-events-auto">
-          
-          <button 
-            onClick={toggleRecording}
+          {error && (
+            <div className="mb-6 flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold px-4 py-2 rounded-xl">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleToggle}
             disabled={!hasPermissions}
             className={`
               relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300
               ${!hasPermissions ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer hover:scale-105 active:scale-95'}
-              ${isRecording ? 'bg-transparent border-[3px] border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.6)]' : 'bg-white border-[6px] border-white/20 bg-clip-padding'}
+              ${isLive ? 'bg-transparent border-[3px] border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.6)]' : 'bg-white border-[6px] border-white/20 bg-clip-padding'}
             `}
-            style={isRecording ? { animation: 'glow-pulse 2s infinite alternate' } : {}}
+            style={isLive ? { animation: 'glow-pulse 2s infinite alternate' } : {}}
           >
-            {isRecording ? (
+            {isLive ? (
               <div className="w-8 h-8 bg-orange-500 rounded-sm transition-all duration-300 shadow-[0_0_15px_rgba(249,115,22,0.8)]" />
             ) : (
               <div className="absolute inset-0 m-auto w-[68px] h-[68px] bg-rose-600 rounded-full flex items-center justify-center shadow-inner">
                 <span className="text-white font-black text-xs tracking-widest uppercase">REC</span>
               </div>
             )}
-            
-            {/* Outer pulse effect when recording */}
-            {isRecording && (
+            {isLive && (
               <div className="absolute inset-0 rounded-full border border-orange-500/50 animate-ping opacity-30" />
             )}
           </button>
 
-          {!isRecording && hasPermissions && (
+          {!isLive && hasPermissions && (
             <p className="text-[10px] font-bold text-white/60 uppercase tracking-widest mt-6 drop-shadow">
               Toca para transmitir
             </p>
@@ -210,11 +272,16 @@ const GuestLive: React.FC = () => {
             <div className="w-16 h-16 bg-orange-500/10 text-orange-500 rounded-full flex items-center justify-center mx-auto mb-6">
               <Video className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Convertite en el<br/>Camarógrafo</h2>
+            <h2 className="text-2xl font-black text-white mb-2 tracking-tight">
+              Convertite en el
+              <br />
+              Camarógrafo
+            </h2>
             <p className="text-sm text-neutral-400 leading-relaxed mb-8">
-              Para transmitir en vivo a la pantalla grande, necesitamos acceso a tu cámara y micrófono.
+              Para transmitir en vivo a la pantalla grande, necesitamos acceso a tu cámara y
+              micrófono.
             </p>
-            <button 
+            <button
               onClick={requestPermissions}
               className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-widest text-sm py-4 rounded-xl transition-all shadow-lg shadow-orange-500/25"
             >
@@ -222,7 +289,8 @@ const GuestLive: React.FC = () => {
             </button>
             {hasPermissions === false && (
               <p className="text-xs text-rose-500 font-bold mt-4 flex items-center justify-center gap-1.5">
-                <AlertCircle className="w-4 h-4" /> Permisos denegados. Revisá los ajustes de tu navegador.
+                <AlertCircle className="w-4 h-4" /> Permisos denegados. Revisá los ajustes de tu
+                navegador.
               </p>
             )}
           </div>

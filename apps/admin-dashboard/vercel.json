@@ -1,0 +1,6 @@
+{
+  "installCommand": "cd ../.. && npm install -g pnpm@9.15.9 && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

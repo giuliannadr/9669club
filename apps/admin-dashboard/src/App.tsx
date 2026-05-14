@@ -9,6 +9,7 @@ import PortfolioManager from './pages/PortfolioManager';
 import QuotesBilling from './pages/QuotesBilling';
 import Settings from './pages/Settings';
 import GuestLive from './pages/GuestLive';
+import StageView from './pages/StageView';
 
 const AdminLayout = () => (
   <DashboardLayout>
@@ -20,8 +21,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public standalone route for guests */}
+        {/* Public standalone routes */}
         <Route path="/live/:roomId" element={<GuestLive />} />
+        <Route path="/stage/:roomId" element={<StageView />} />
 
         {/* Admin routes wrapped in DashboardLayout */}
         <Route element={<AdminLayout />}>
