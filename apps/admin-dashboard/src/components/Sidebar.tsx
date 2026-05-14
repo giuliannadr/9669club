@@ -1,20 +1,17 @@
 import React, { useState } from 'react';
 import { 
-  LayoutDashboard, 
-  Radio, 
-  Trello, 
-  Calendar, 
-  Video, 
-  FileText, 
-  Settings, 
+  LayoutDashboard,
+  Radio,
+  Trello,
+  Calendar,
+  Video,
+  FileText,
+  Settings,
   ChevronRight,
-  LogOut,
-  User,
   Menu,
   X
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { useThemeStore } from '../store/themeStore';
 
 interface SidebarItemProps {
   icon: React.ReactNode;

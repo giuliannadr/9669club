@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Star, Download, Play, Heart, Filter, Search, Grid, List, Share2, Sparkles } from 'lucide-react';
+import { Star, Download, Play, Search, Grid, Share2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Asset {

@@ -6,7 +6,6 @@ import {
   Maximize2,
   QrCode,
   Activity,
-  Zap,
   MoreVertical,
   Monitor,
   Settings,
@@ -23,7 +22,6 @@ import {
   Track,
   ConnectionQuality,
   ParticipantEvent,
-  DataPacket_Kind,
 } from 'livekit-client';
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
@@ -289,7 +287,7 @@ const LiveControl: React.FC = () => {
     const data = new TextEncoder().encode(
       JSON.stringify({ type: 'SELECT_STREAM', participantIdentity: identity })
     );
-    room.localParticipant.publishData(data, { reliable: true, kind: DataPacket_Kind.RELIABLE });
+    room.localParticipant.publishData(data, { reliable: true });
   }, []);
 
   const handleToggleRoom = async () => {
