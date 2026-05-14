@@ -10,7 +10,6 @@ import {
   Track,
 } from 'livekit-client';
 
-const TOKEN_API_URL = import.meta.env.VITE_TOKEN_API_URL ?? '';
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 const GuestLive: React.FC = () => {
@@ -86,7 +85,7 @@ const GuestLive: React.FC = () => {
     }
     setError(null);
     try {
-      const res = await fetch(`${TOKEN_API_URL}/api/livekit-token`, {
+      const res = await fetch('/api/livekit-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId, identity: guestId.current, role: 'guest' }),

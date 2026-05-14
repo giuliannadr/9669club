@@ -26,7 +26,6 @@ import {
   DataPacket_Kind,
 } from 'livekit-client';
 
-const TOKEN_API_URL = import.meta.env.VITE_TOKEN_API_URL ?? '';
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 // ── Signal strength indicator ──────────────────────────────────────────────
@@ -242,7 +241,7 @@ const LiveControl: React.FC = () => {
   const connectRoom = useCallback(async (id: string) => {
     if (!LIVEKIT_URL) return;
     try {
-      const res = await fetch(`${TOKEN_API_URL}/api/livekit-token`, {
+      const res = await fetch('/api/livekit-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomId: id, identity: 'admin', role: 'admin' }),

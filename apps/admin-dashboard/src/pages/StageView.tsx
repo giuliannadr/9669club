@@ -9,7 +9,6 @@ import {
   ParticipantEvent,
 } from 'livekit-client';
 
-const TOKEN_API_URL = import.meta.env.VITE_TOKEN_API_URL ?? '';
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 interface SelectMessage {
@@ -77,7 +76,7 @@ const StageView: React.FC = () => {
 
     const connect = async () => {
       try {
-        const res = await fetch(`${TOKEN_API_URL}/api/livekit-token`, {
+        const res = await fetch('/api/livekit-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roomId, identity: 'stage', role: 'stage' }),
