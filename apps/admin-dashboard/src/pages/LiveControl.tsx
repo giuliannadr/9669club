@@ -284,10 +284,13 @@ const LiveControl: React.FC = () => {
   const broadcastSelection = useCallback((identity: string) => {
     const room = roomRef.current;
     if (!room) return;
+    // Data message for participants already connected
     const data = new TextEncoder().encode(
       JSON.stringify({ type: 'SELECT_STREAM', participantIdentity: identity })
     );
     room.localParticipant.publishData(data, { reliable: true });
+    // Metadata so late-joiners (stage screen) read the selection on connect
+    room.localParticipant.setMetadata(JSON.stringify({ selectedIdentity: identity }));
   }, []);
 
   const handleToggleRoom = async () => {

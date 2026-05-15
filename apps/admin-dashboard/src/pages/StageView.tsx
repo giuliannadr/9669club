@@ -11,17 +11,19 @@ import {
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
-interface SelectMessage {
-  type: 'SELECT_STREAM';
-  participantIdentity: string;
-}
+const readSelectedIdentity = (participant: RemoteParticipant | undefined): string | null => {
+  if (!participant?.metadata) return null;
+  try {
+    return JSON.parse(participant.metadata).selectedIdentity ?? null;
+  } catch {
+    return null;
+  }
+};
 
-const StageVideo: React.FC<{ participant: RemoteParticipant | null }> = ({ participant }) => {
+const StageVideo: React.FC<{ participant: RemoteParticipant }> = ({ participant }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (!participant) return;
-
     const attach = () => {
       const pub = participant.getTrackPublication(Track.Source.Camera);
       if (pub?.videoTrack && videoRef.current) {
@@ -92,7 +94,9 @@ const StageView: React.FC = () => {
         room.on(RoomEvent.Disconnected, () => setIsConnected(false));
 
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
-          setParticipants(prev => new Map(prev).set(p.identity, p));
+          if (p.identity !== 'admin') {
+            setParticipants(prev => new Map(prev).set(p.identity, p));
+          }
         });
 
         room.on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
@@ -105,26 +109,42 @@ const StageView: React.FC = () => {
         });
 
         room.on(RoomEvent.TrackSubscribed, (_track, _pub, participant: RemoteParticipant) => {
-          setParticipants(prev => new Map(prev).set(participant.identity, participant));
+          if (participant.identity !== 'admin') {
+            setParticipants(prev => new Map(prev).set(participant.identity, participant));
+          }
         });
 
+        // Data message: admin selected a stream while stage was already connected
         room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
           try {
-            const msg: SelectMessage = JSON.parse(new TextDecoder().decode(payload));
+            const msg = JSON.parse(new TextDecoder().decode(payload));
             if (msg.type === 'SELECT_STREAM') {
               setSelectedIdentity(msg.participantIdentity);
             }
-          } catch {
-            // ignore malformed messages
+          } catch { /* ignore */ }
+        });
+
+        // Metadata change: catches updates to admin's selected stream
+        room.on(RoomEvent.ParticipantMetadataChanged, (_metadata, participant) => {
+          if (participant.identity === 'admin') {
+            const identity = readSelectedIdentity(participant as RemoteParticipant);
+            if (identity) setSelectedIdentity(identity);
           }
         });
 
         await room.connect(LIVEKIT_URL, token);
 
-        // Capture already-connected participants
-        setParticipants(new Map(
+        // Capture already-connected guests
+        const existing = new Map(
           Array.from(room.remoteParticipants.entries()).filter(([id]) => id !== 'admin')
-        ));
+        );
+        setParticipants(existing);
+
+        // Read admin's current selection from metadata (handles late-join case)
+        const adminParticipant = room.remoteParticipants.get('admin');
+        const currentSelection = readSelectedIdentity(adminParticipant);
+        if (currentSelection) setSelectedIdentity(currentSelection);
+
       } catch (err) {
         setError('No se pudo conectar a la sala.');
         console.error(err);
@@ -132,58 +152,48 @@ const StageView: React.FC = () => {
     };
 
     connect();
-
-    return () => {
-      roomRef.current?.disconnect();
-    };
+    return () => { roomRef.current?.disconnect(); };
   }, [roomId]);
 
   const selectedParticipant = selectedIdentity ? participants.get(selectedIdentity) ?? null : null;
 
-  // Waiting / error screen
   if (error) {
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-neutral-500 text-xl font-bold uppercase tracking-widest">{error}</p>
-        </div>
+        <p className="text-neutral-500 text-xl font-bold uppercase tracking-widest">{error}</p>
       </div>
     );
   }
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
-      {/* Main video output */}
       <div className="absolute inset-0">
         {selectedParticipant ? (
           <StageVideo participant={selectedParticipant} />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-8">
-            <div className="flex flex-col items-center gap-4">
-              {isConnected ? (
-                <>
-                  <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
-                  <p className="text-neutral-600 text-2xl font-black uppercase tracking-[0.4em]">
-                    Esperando selección...
-                  </p>
-                  <p className="text-neutral-700 text-sm tracking-widest">
-                    El admin seleccionará la cámara a proyectar
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="w-3 h-3 bg-neutral-700 rounded-full" />
-                  <p className="text-neutral-700 text-2xl font-black uppercase tracking-[0.4em]">
-                    Conectando...
-                  </p>
-                </>
-              )}
-            </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+            {isConnected ? (
+              <>
+                <div className="w-3 h-3 bg-orange-500 rounded-full animate-pulse" />
+                <p className="text-neutral-600 text-2xl font-black uppercase tracking-[0.4em]">
+                  Esperando selección...
+                </p>
+                <p className="text-neutral-700 text-sm tracking-widest">
+                  El admin seleccionará la cámara a proyectar
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="w-3 h-3 bg-neutral-700 rounded-full" />
+                <p className="text-neutral-700 text-2xl font-black uppercase tracking-[0.4em]">
+                  Conectando...
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* Subtle branding overlay */}
       {selectedParticipant && (
         <>
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />

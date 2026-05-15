@@ -31,8 +31,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     room: roomId,
     roomJoin: true,
     canPublish: role === 'guest',
+    canPublishData: role === 'admin',
     canSubscribe: true,
     roomAdmin: role === 'admin',
+    canUpdateOwnMetadata: role === 'admin',
   });
 
   const token = await at.toJwt();
