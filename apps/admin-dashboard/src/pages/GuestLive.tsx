@@ -26,6 +26,7 @@ const GuestLive: React.FC = () => {
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
+  const [roomClosed, setRoomClosed] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const roomRef = useRef<Room | null>(null);
@@ -151,7 +152,20 @@ const GuestLive: React.FC = () => {
 
       const room = new Room({ adaptiveStream: true, dynacast: true });
       roomRef.current = room;
+
       room.on(RoomEvent.Disconnected, () => setIsLive(false));
+
+      room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload));
+          if (msg.type === 'ROOM_CLOSED') {
+            setRoomClosed(true);
+            setIsLive(false);
+            roomRef.current?.disconnect();
+            roomRef.current = null;
+          }
+        } catch { /* ignore */ }
+      });
 
       await room.connect(LIVEKIT_URL, token);
 
@@ -335,6 +349,22 @@ const GuestLive: React.FC = () => {
           100% { box-shadow: 0 0 30px rgba(249,115,22,0.8), inset 0 0 10px rgba(249,115,22,0.4); border-color: rgba(249,115,22,1); }
         }
       `}</style>
+
+      {/* Room Closed Screen */}
+      {roomClosed && (
+        <div className="absolute inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center">
+          <div className="w-20 h-20 bg-neutral-900 border border-neutral-800 rounded-full flex items-center justify-center mx-auto mb-8">
+            <div className="w-6 h-6 bg-neutral-600 rounded-sm" />
+          </div>
+          <p className="text-white text-3xl font-black tracking-tight mb-3">Sala Cerrada</p>
+          <p className="text-neutral-500 text-sm leading-relaxed max-w-xs">
+            El administrador cerró la transmisión. ¡Gracias por participar!
+          </p>
+          <div className="mt-10 text-neutral-700 font-black tracking-[0.3em] text-sm">
+            9669<span className="text-orange-500/50">.STUDIO</span>
+          </div>
+        </div>
+      )}
 
       {/* Permissions Modal */}
       {showPermissionModal && (

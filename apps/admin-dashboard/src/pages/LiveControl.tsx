@@ -299,8 +299,14 @@ const LiveControl: React.FC = () => {
       setIsRoomOpen(true);
       await connectRoom(newId);
     } else {
-      roomRef.current?.disconnect();
-      roomRef.current = null;
+      // Notify all guests before disconnecting
+      if (roomRef.current) {
+        const data = new TextEncoder().encode(JSON.stringify({ type: 'ROOM_CLOSED' }));
+        roomRef.current.localParticipant.publishData(data, { reliable: true });
+        await new Promise(resolve => setTimeout(resolve, 400));
+        roomRef.current.disconnect();
+        roomRef.current = null;
+      }
       setRoomId(null);
       setParticipants([]);
       setSelectedIdentity(null);
