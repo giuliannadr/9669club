@@ -210,6 +210,8 @@ const MasterVideo: React.FC<{ participant: RemoteParticipant | null }> = ({ part
 };
 
 // ── Main LiveControl component ─────────────────────────────────────────────
+const SYSTEM_IDENTITIES = new Set(['admin', 'stage']);
+
 const LiveControl: React.FC = () => {
   const [isRoomOpen, setIsRoomOpen] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -220,6 +222,7 @@ const LiveControl: React.FC = () => {
   const [latency, setLatency] = useState<number | null>(null);
 
   const roomRef = useRef<Room | null>(null);
+  const selectedIdentityRef = useRef<string | null>(null);
 
   const isLocalhost =
     typeof window !== 'undefined' &&
@@ -250,6 +253,21 @@ const LiveControl: React.FC = () => {
       roomRef.current = room;
 
       room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
+        if (SYSTEM_IDENTITIES.has(p.identity)) {
+          // Re-broadcast current selection to stage when it joins
+          if (p.identity === 'stage' && selectedIdentityRef.current) {
+            const sel = selectedIdentityRef.current;
+            setTimeout(() => {
+              const r = roomRef.current;
+              if (!r) return;
+              const data = new TextEncoder().encode(
+                JSON.stringify({ type: 'SELECT_STREAM', participantIdentity: sel })
+              );
+              r.localParticipant.publishData(data, { reliable: true });
+            }, 300);
+          }
+          return;
+        }
         setParticipants(prev => [...prev, p]);
       });
 
@@ -274,14 +292,16 @@ const LiveControl: React.FC = () => {
 
       await room.connect(LIVEKIT_URL, token);
 
-      // Capture already-connected participants (edge case: race condition)
-      setParticipants(Array.from(room.remoteParticipants.values()));
+      // Capture already-connected guests (exclude system identities)
+      setParticipants(
+        Array.from(room.remoteParticipants.values()).filter(p => !SYSTEM_IDENTITIES.has(p.identity))
+      );
     } catch (err) {
       console.error('Failed to connect as admin', err);
     }
   }, []);
 
-  const broadcastSelection = useCallback((identity: string) => {
+  const broadcastSelection = useCallback(async (identity: string) => {
     const room = roomRef.current;
     if (!room) return;
     // Data message for participants already connected
@@ -290,7 +310,7 @@ const LiveControl: React.FC = () => {
     );
     room.localParticipant.publishData(data, { reliable: true });
     // Metadata so late-joiners (stage screen) read the selection on connect
-    room.localParticipant.setMetadata(JSON.stringify({ selectedIdentity: identity }));
+    await room.localParticipant.setMetadata(JSON.stringify({ selectedIdentity: identity }));
   }, []);
 
   const handleToggleRoom = async () => {
@@ -317,9 +337,10 @@ const LiveControl: React.FC = () => {
     }
   };
 
-  const handleProjectStream = (identity: string) => {
+  const handleProjectStream = async (identity: string) => {
+    selectedIdentityRef.current = identity;
     setSelectedIdentity(identity);
-    broadcastSelection(identity);
+    await broadcastSelection(identity);
   };
 
   const handleRemoveStream = (identity: string) => {
