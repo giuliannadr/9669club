@@ -159,10 +159,14 @@ const GuestLive: React.FC = () => {
         try {
           const msg = JSON.parse(new TextDecoder().decode(payload));
           if (msg.type === 'ROOM_CLOSED') {
-            setRoomClosed(true);
-            setIsLive(false);
             roomRef.current?.disconnect();
             roomRef.current = null;
+            localVideoRef.current?.stop();
+            localVideoRef.current = null;
+            localAudioRef.current?.stop();
+            localAudioRef.current = null;
+            setIsLive(false);
+            setRoomClosed(true);
           }
         } catch { /* ignore */ }
       });
