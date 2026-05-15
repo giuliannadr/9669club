@@ -257,14 +257,17 @@ const LiveControl: React.FC = () => {
           // Re-broadcast current selection to stage when it joins
           if (p.identity === 'stage' && selectedIdentityRef.current) {
             const sel = selectedIdentityRef.current;
-            setTimeout(() => {
+            // Give stage time to finish connecting; send twice in case first arrives early
+            const rebroadcast = () => {
               const r = roomRef.current;
               if (!r) return;
               const data = new TextEncoder().encode(
                 JSON.stringify({ type: 'SELECT_STREAM', participantIdentity: sel })
               );
               r.localParticipant.publishData(data, { reliable: true });
-            }, 300);
+            };
+            setTimeout(rebroadcast, 1000);
+            setTimeout(rebroadcast, 2500);
           }
           return;
         }

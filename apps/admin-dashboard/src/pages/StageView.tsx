@@ -141,9 +141,15 @@ const StageView: React.FC = () => {
         setParticipants(existing);
 
         // Read admin's current selection from metadata (handles late-join case)
-        const adminParticipant = room.remoteParticipants.get('admin');
-        const currentSelection = readSelectedIdentity(adminParticipant);
-        if (currentSelection) setSelectedIdentity(currentSelection);
+        const tryReadAdminSelection = () => {
+          const adminP = roomRef.current?.remoteParticipants.get('admin');
+          const sel = readSelectedIdentity(adminP);
+          if (sel) setSelectedIdentity(sel);
+        };
+        tryReadAdminSelection();
+        // Retry in case metadata or participants weren't fully populated yet
+        setTimeout(tryReadAdminSelection, 800);
+        setTimeout(tryReadAdminSelection, 2000);
 
       } catch (err) {
         setError('No se pudo conectar a la sala.');
