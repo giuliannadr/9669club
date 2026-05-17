@@ -93,11 +93,7 @@ const QRCorner: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, guestU
 );
 
 // ── Waiting screen (no stream selected) ─────────────────────────────────────
-const WaitingScreen: React.FC<{ isConnected: boolean; qrUrl: string; guestUrl: string }> = ({
-  isConnected,
-  qrUrl,
-  guestUrl,
-}) => (
+const WaitingScreen: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, guestUrl }) => (
   <div className="absolute inset-0 flex flex-col items-center justify-center select-none">
     {/* Top brand */}
     <div className="absolute top-10 left-1/2 -translate-x-1/2">
@@ -106,60 +102,45 @@ const WaitingScreen: React.FC<{ isConnected: boolean; qrUrl: string; guestUrl: s
       </p>
     </div>
 
-    {/* Center content */}
+    {/* Center content — always visible */}
     <div className="flex flex-col items-center gap-10 px-16 text-center">
-      {/* QR grande al centro */}
-      {isConnected && qrUrl && (
-        <div className="flex flex-col items-center gap-6">
-          <div className="relative">
-            <div className="absolute -inset-3 rounded-[2rem] bg-gradient-to-br from-orange-500/30 to-rose-500/20 blur-xl animate-pulse" />
-            <div className="relative bg-white p-5 rounded-[1.5rem] shadow-[0_0_80px_rgba(249,115,22,0.2)]">
-              <img src={qrUrl} alt="QR Code" className="w-64 h-64 block" />
-            </div>
+      <div className="flex flex-col items-center gap-6">
+        <div className="relative">
+          <div className="absolute -inset-3 rounded-[2rem] bg-gradient-to-br from-orange-500/30 to-rose-500/20 blur-xl animate-pulse" />
+          <div className="relative bg-white p-5 rounded-[1.5rem] shadow-[0_0_80px_rgba(249,115,22,0.2)]">
+            <img src={qrUrl} alt="QR Code" className="w-64 h-64 block" />
           </div>
+        </div>
 
-          <div className="space-y-3">
-            <p className="text-white font-black text-4xl tracking-tight leading-tight">
-              ESCANEÁ<br />
-              <span className="text-orange-500">&amp; SÉ PARTE</span>
-            </p>
-            <p className="text-white/40 text-base tracking-[0.3em] uppercase font-bold">
-              del momento
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3 text-white/30 text-xs font-bold uppercase tracking-[0.3em]">
-            <div className="w-8 h-px bg-white/20" />
-            abrí la cámara y transmití en vivo
-            <div className="w-8 h-px bg-white/20" />
-          </div>
-
-          <p className="text-white/20 text-sm font-mono tracking-wider">
-            {guestUrl.replace(/^https?:\/\//, '')}
+        <div className="space-y-3">
+          <p className="text-white font-black text-4xl tracking-tight leading-tight">
+            ESCANEÁ<br />
+            <span className="text-orange-500">&amp; SÉ PARTE</span>
+          </p>
+          <p className="text-white/40 text-base tracking-[0.3em] uppercase font-bold">
+            del momento
           </p>
         </div>
-      )}
 
-      {/* Connecting state */}
-      {!isConnected && (
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-3 h-3 bg-neutral-700 rounded-full animate-pulse" />
-          <p className="text-neutral-700 text-2xl font-black uppercase tracking-[0.4em]">
-            Conectando...
-          </p>
+        <div className="flex items-center gap-3 text-white/30 text-xs font-bold uppercase tracking-[0.3em]">
+          <div className="w-8 h-px bg-white/20" />
+          abrí la cámara y transmití en vivo
+          <div className="w-8 h-px bg-white/20" />
         </div>
-      )}
-    </div>
 
-    {/* Bottom status dot */}
-    {isConnected && (
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2">
-        <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-        <p className="text-white/20 text-xs font-bold uppercase tracking-widest">
-          En espera de señal
+        <p className="text-white/20 text-sm font-mono tracking-wider">
+          {guestUrl.replace(/^https?:\/\//, '')}
         </p>
       </div>
-    )}
+    </div>
+
+    {/* Bottom pulse */}
+    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2">
+      <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+      <p className="text-white/20 text-xs font-bold uppercase tracking-widest">
+        En espera de señal
+      </p>
+    </div>
   </div>
 );
 
@@ -168,7 +149,6 @@ const StageView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [participants, setParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
   const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const roomRef = useRef<Room | null>(null);
@@ -200,8 +180,7 @@ const StageView: React.FC = () => {
         const room = new Room({ adaptiveStream: true, dynacast: true });
         roomRef.current = room;
 
-        room.on(RoomEvent.Connected, () => setIsConnected(true));
-        room.on(RoomEvent.Disconnected, () => setIsConnected(false));
+        room.on(RoomEvent.Disconnected, () => setSelectedIdentity(null));
 
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
           if (p.identity !== 'admin') {
@@ -286,7 +265,7 @@ const StageView: React.FC = () => {
         {selectedParticipant ? (
           <StageVideo participant={selectedParticipant} />
         ) : (
-          <WaitingScreen isConnected={isConnected} qrUrl={qrUrl} guestUrl={guestUrl} />
+          <WaitingScreen qrUrl={qrUrl} guestUrl={guestUrl} />
         )}
       </div>
 
