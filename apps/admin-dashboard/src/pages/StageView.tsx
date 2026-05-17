@@ -11,12 +11,19 @@ import {
 
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
-const readSelectedIdentity = (participant: RemoteParticipant | undefined): string | null => {
-  if (!participant?.metadata) return null;
+const readSelectedIdentities = (participant: RemoteParticipant | undefined): string[] => {
+  if (!participant?.metadata) return [];
   try {
-    return JSON.parse(participant.metadata).selectedIdentity ?? null;
+    const meta = JSON.parse(participant.metadata);
+    // New format: array
+    if (Array.isArray(meta.selectedIdentities)) return meta.selectedIdentities;
+    // Backward compat: single string
+    if (typeof meta.selectedIdentity === 'string' && meta.selectedIdentity) {
+      return [meta.selectedIdentity];
+    }
+    return [];
   } catch {
-    return null;
+    return [];
   }
 };
 
@@ -51,7 +58,10 @@ const QRCorner: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, guestU
 );
 
 // ── Phone mockup with live video ─────────────────────────────────────────────
-const PhoneMockup: React.FC<{ participant: RemoteParticipant }> = ({ participant }) => {
+const PhoneMockup: React.FC<{ participant: RemoteParticipant; heightVh: number }> = ({
+  participant,
+  heightVh,
+}) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -79,16 +89,22 @@ const PhoneMockup: React.FC<{ participant: RemoteParticipant }> = ({ participant
     };
   }, [participant]);
 
+  const borderRadius = heightVh >= 78 ? 52 : heightVh >= 68 ? 46 : 40;
+  const screenRadius = borderRadius - 8;
+
   return (
-    <div className="phone-outer">
+    <div
+      className="phone-outer"
+      style={{ height: `${heightVh}vh`, borderRadius: `${borderRadius}px` }}
+    >
       {/* Volume buttons — left */}
-      <div className="phone-btn" style={{ left: '-5px', top: '18%',  height: '28px' }} />
-      <div className="phone-btn" style={{ left: '-5px', top: '28%',  height: '52px' }} />
+      <div className="phone-btn" style={{ left: '-5px', top: '18%', height: '28px' }} />
+      <div className="phone-btn" style={{ left: '-5px', top: '28%', height: '52px' }} />
       {/* Power button — right */}
       <div className="phone-btn" style={{ right: '-5px', top: '24%', height: '64px' }} />
 
       {/* Screen */}
-      <div className="phone-screen">
+      <div className="phone-screen" style={{ borderRadius: `${screenRadius}px` }}>
         {/* Dynamic island */}
         <div className="phone-island">
           <div className="phone-camera" />
@@ -165,11 +181,14 @@ const WaitingScreen: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, g
   </div>
 );
 
+// height per count
+const PHONE_HEIGHTS: Record<number, number> = { 1: 78, 2: 68, 3: 55 };
+
 // ── Main StageView ───────────────────────────────────────────────────────────
 const StageView: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const [participants, setParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
-  const [selectedIdentity, setSelectedIdentity] = useState<string | null>(null);
+  const [selectedIdentities, setSelectedIdentities] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const roomRef = useRef<Room | null>(null);
@@ -198,21 +217,21 @@ const StageView: React.FC = () => {
         const room = new Room({ adaptiveStream: true, dynacast: true });
         roomRef.current = room;
 
-        room.on(RoomEvent.Disconnected, () => setSelectedIdentity(null));
+        room.on(RoomEvent.Disconnected, () => setSelectedIdentities([]));
 
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
-          if (p.identity !== 'admin') {
+          if (p.identity !== 'admin' && p.identity !== 'stage') {
             setParticipants(prev => new Map(prev).set(p.identity, p));
           }
         });
 
         room.on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
           setParticipants(prev => { const n = new Map(prev); n.delete(p.identity); return n; });
-          setSelectedIdentity(prev => (prev === p.identity ? null : prev));
+          setSelectedIdentities(prev => prev.filter(id => id !== p.identity));
         });
 
         room.on(RoomEvent.TrackSubscribed, (_t, _p, participant: RemoteParticipant) => {
-          if (participant.identity !== 'admin') {
+          if (participant.identity !== 'admin' && participant.identity !== 'stage') {
             setParticipants(prev => new Map(prev).set(participant.identity, participant));
           }
         });
@@ -220,27 +239,36 @@ const StageView: React.FC = () => {
         room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
           try {
             const msg = JSON.parse(new TextDecoder().decode(payload));
-            if (msg.type === 'SELECT_STREAM') setSelectedIdentity(msg.participantIdentity);
+            // New multi-stream format
+            if (msg.type === 'SELECT_STREAMS' && Array.isArray(msg.identities)) {
+              setSelectedIdentities(msg.identities);
+            }
+            // Backward compat: old single-stream format
+            if (msg.type === 'SELECT_STREAM' && typeof msg.participantIdentity === 'string') {
+              setSelectedIdentities(msg.participantIdentity ? [msg.participantIdentity] : []);
+            }
           } catch { /* ignore */ }
         });
 
         room.on(RoomEvent.ParticipantMetadataChanged, (_m, participant) => {
           if (participant.identity === 'admin') {
-            const id = readSelectedIdentity(participant as RemoteParticipant);
-            if (id) setSelectedIdentity(id);
+            const ids = readSelectedIdentities(participant as RemoteParticipant);
+            if (ids.length > 0) setSelectedIdentities(ids);
           }
         });
 
         await room.connect(LIVEKIT_URL, token);
 
         setParticipants(new Map(
-          Array.from(room.remoteParticipants.entries()).filter(([id]) => id !== 'admin')
+          Array.from(room.remoteParticipants.entries()).filter(
+            ([id]) => id !== 'admin' && id !== 'stage'
+          )
         ));
 
         const tryReadAdmin = () => {
           const adminP = roomRef.current?.remoteParticipants.get('admin');
-          const sel = readSelectedIdentity(adminP);
-          if (sel) setSelectedIdentity(sel);
+          const ids = readSelectedIdentities(adminP);
+          if (ids.length > 0) setSelectedIdentities(ids);
         };
         tryReadAdmin();
         setTimeout(tryReadAdmin, 800);
@@ -256,7 +284,13 @@ const StageView: React.FC = () => {
     return () => { roomRef.current?.disconnect(); };
   }, [roomId]);
 
-  const selectedParticipant = selectedIdentity ? participants.get(selectedIdentity) ?? null : null;
+  // Resolve participant objects in selection order, skip missing ones
+  const selectedParticipants = selectedIdentities
+    .map(id => participants.get(id))
+    .filter((p): p is RemoteParticipant => !!p);
+
+  const count = selectedParticipants.length;
+  const phoneHeight = PHONE_HEIGHTS[count] ?? 78;
 
   if (error) {
     return (
@@ -273,15 +307,22 @@ const StageView: React.FC = () => {
 
       {/* Content layer */}
       <div className="absolute inset-0 flex items-center justify-center z-10">
-        {selectedParticipant ? (
-          <PhoneMockup participant={selectedParticipant} />
+        {count > 0 ? (
+          <div
+            className="flex items-center justify-center"
+            style={{ gap: count === 3 ? '16px' : '24px' }}
+          >
+            {selectedParticipants.map(p => (
+              <PhoneMockup key={p.identity} participant={p} heightVh={phoneHeight} />
+            ))}
+          </div>
         ) : (
           <WaitingScreen qrUrl={qrUrl} guestUrl={guestUrl} />
         )}
       </div>
 
       {/* Persistent overlays when streaming */}
-      {selectedParticipant && (
+      {count > 0 && (
         <>
           {/* Brand */}
           <div className="absolute bottom-8 left-10 opacity-20 pointer-events-none z-20">
@@ -355,10 +396,8 @@ const StageView: React.FC = () => {
         /* ── Phone mockup ── */
         .phone-outer {
           position: relative;
-          height: 78vh;
           aspect-ratio: 9 / 19.5;
           background: linear-gradient(160deg, #3a3a3c 0%, #1c1c1e 40%, #2c2c2e 100%);
-          border-radius: 52px;
           padding: 9px;
           box-shadow:
             0 0 0 1px rgba(255,255,255,0.12),
@@ -384,7 +423,6 @@ const StageView: React.FC = () => {
           width: 100%;
           height: 100%;
           background: #000;
-          border-radius: 44px;
           overflow: hidden;
           position: relative;
         }
