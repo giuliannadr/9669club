@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install -g pnpm@9.15.9 && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter admin-dashboard build",
+  "buildCommand": "pnpm --filter admin-dashboard build && cp -r apps/admin-dashboard/dist ./dist",
   "outputDirectory": "dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
