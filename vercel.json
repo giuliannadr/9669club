@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install -g pnpm@9.15.9 && pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter admin-dashboard build && mkdir -p /vercel/path0/dist && cp -r /vercel/path0/apps/admin-dashboard/dist/. /vercel/path0/dist/",
+  "buildCommand": "pnpm --filter admin-dashboard build && mkdir -p dist && cp -r ../admin-dashboard/dist/. dist/ && mkdir -p api && cp -r ../admin-dashboard/api/. api/",
   "outputDirectory": "dist",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
