@@ -73,7 +73,7 @@ const GuestLive: React.FC = () => {
     try {
       const videoTrack = await createLocalVideoTrack({
         facingMode,
-        resolution: { width: 1280, height: 720 },
+        resolution: { width: 1080, height: 1920 },
       });
       const audioTrack = await createLocalAudioTrack();
 
@@ -100,7 +100,7 @@ const GuestLive: React.FC = () => {
     try {
       const newVideoTrack = await createLocalVideoTrack({
         facingMode: newFacing,
-        resolution: { width: 1280, height: 720 },
+        resolution: { width: 1080, height: 1920 },
       });
 
       // Swap in room if live

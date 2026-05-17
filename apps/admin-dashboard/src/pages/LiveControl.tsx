@@ -103,7 +103,7 @@ const GuestVideoCard: React.FC<{
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }}
       className={`
-        group relative aspect-video rounded-2xl overflow-hidden bg-neutral-900 border transition-all duration-300 cursor-pointer
+        group relative aspect-[9/16] rounded-2xl overflow-hidden bg-black border transition-all duration-300 cursor-pointer
         ${isSelected ? 'border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'border-neutral-800 hover:border-neutral-600 hover:shadow-lg'}
       `}
       onClick={onSelect}
@@ -113,7 +113,7 @@ const GuestVideoCard: React.FC<{
         autoPlay
         playsInline
         muted
-        className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${isSelected ? 'opacity-100' : 'opacity-70 group-hover:opacity-90'}`}
+        className={`w-full h-full object-contain transition-transform duration-700 group-hover:scale-105 ${isSelected ? 'opacity-100' : 'opacity-70 group-hover:opacity-90'}`}
       />
 
       {!hasVideo && (
@@ -204,7 +204,7 @@ const MasterVideo: React.FC<{ participant: RemoteParticipant | null }> = ({ part
       autoPlay
       playsInline
       muted
-      className="w-full h-full object-cover grayscale-[0.1]"
+      className="w-full h-full object-contain bg-black"
     />
   );
 };
@@ -621,7 +621,7 @@ const LiveControl: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
+            <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4 overflow-y-auto pr-2 custom-scrollbar flex-1">
               <AnimatePresence>
                 {participants.length === 0 && isRoomOpen && (
                   <motion.div
