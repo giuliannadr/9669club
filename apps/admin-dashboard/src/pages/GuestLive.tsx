@@ -96,21 +96,24 @@ const GuestLive: React.FC = () => {
     setTorchOn(false);
 
     const newFacing: FacingMode = facingMode === 'environment' ? 'user' : 'environment';
+    const oldTrack = localVideoRef.current;
 
     try {
-      const newVideoTrack = await createLocalVideoTrack({
-        facingMode: newFacing,
-      });
+      // ── Step 1: release the current camera FIRST ─────────────────────────
+      // Many mobile browsers throw NotReadableError if a second camera is
+      // opened while the first is still active.
+      if (roomRef.current && oldTrack) {
+        await roomRef.current.localParticipant.unpublishTrack(oldTrack);
+      }
+      oldTrack?.stop();
+      localVideoRef.current = null;
 
-      // Swap in room if live
-      if (roomRef.current && localVideoRef.current) {
-        await roomRef.current.localParticipant.unpublishTrack(localVideoRef.current);
-        localVideoRef.current.stop();
-        localVideoRef.current = newVideoTrack;
+      // ── Step 2: open the new camera ───────────────────────────────────────
+      const newVideoTrack = await createLocalVideoTrack({ facingMode: newFacing });
+      localVideoRef.current = newVideoTrack;
+
+      if (roomRef.current) {
         await roomRef.current.localParticipant.publishTrack(newVideoTrack);
-      } else {
-        localVideoRef.current?.stop();
-        localVideoRef.current = newVideoTrack;
       }
 
       attachVideoTrack(newVideoTrack);

@@ -35,9 +35,9 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   }, [theme]);
 
   return (
-    <div className={`min-h-screen flex bg-white dark:bg-[#0a0a0a] transition-colors duration-300`}>
+    <div className={`h-screen overflow-hidden flex bg-white dark:bg-[#0a0a0a] transition-colors duration-300`}>
       <Sidebar />
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
         {/* Header/Top Bar */}
         <header className="h-16 flex items-center justify-between px-8 bg-white/80 dark:bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-30 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-4">
