@@ -81,13 +81,14 @@ const GuestVideoCard: React.FC<{
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }}
-      className={`group relative aspect-[9/16] rounded-2xl overflow-hidden bg-black border transition-all duration-300 cursor-pointer
+      className={`group relative aspect-[16/9] rounded-2xl overflow-hidden bg-black border transition-all duration-300 cursor-pointer
         ${isSelected ? 'border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.35)]' : 'border-neutral-800 hover:border-neutral-600'}`}
       onClick={!disabled || isSelected ? onSelect : undefined}
     >
-      <video ref={videoRef} autoPlay playsInline muted
-        className={`w-full h-full object-contain transition-all duration-500 ${isSelected ? 'opacity-100' : 'opacity-60 group-hover:opacity-85'}`}
-      />
+      {/* Wrapper handles opacity; video rotates portrait→landscape to fill 16:9 card */}
+      <div className={`absolute inset-0 transition-opacity duration-500 ${isSelected ? 'opacity-100' : 'opacity-60 group-hover:opacity-85'}`}>
+        <video ref={videoRef} autoPlay playsInline muted className="card-video" />
+      </div>
 
       {!hasVideo && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-600 gap-2">
@@ -623,8 +624,11 @@ const LiveControl: React.FC = () => {
         .pp-tbtn-h { position:absolute; height:3px; background:linear-gradient(90deg,#3a3a3c,#2c2c2e); border-radius:2px; }
         .pp-tcam { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:6px; height:6px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#1a3a5c,#0a0a14); box-shadow:0 0 0 1px rgba(255,255,255,0.04); z-index:20; }
         .pp-tscreen { width:100%; height:100%; background:#000; border-radius:10px; overflow:hidden; position:relative; }
-        /* Rotate portrait stream to fill 4:3 landscape frame */
+        /* Rotate portrait stream to fill 4:3 landscape tablet frame */
         .tab-video { position:absolute; top:50%; left:50%; width:75%; height:133.34%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
+        /* Rotate portrait stream to fill 16:9 landscape card (guest grid) */
+        /* H = W*9/16 → css-width=56.25%, css-height=177.78% */
+        .card-video { position:absolute; top:50%; left:50%; width:56.25%; height:177.78%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
 
         .custom-scrollbar::-webkit-scrollbar { width:4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background:transparent; }
