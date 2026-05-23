@@ -124,7 +124,7 @@ const GuestVideoCard: React.FC<{
                   ? 'bg-white/5 text-white/20 cursor-not-allowed'
                   : 'bg-white/10 backdrop-blur-md text-white hover:bg-white/20'}`}
           >
-            {isSelected ? `MASTER ${(selectionIndex ?? 0) + 1}` : 'PROYECTAR'}
+            {isSelected ? `PANTALLA ${(selectionIndex ?? 0) + 1}` : 'PROYECTAR'}
           </button>
           <button
             onClick={e => { e.stopPropagation(); onRemove(); }}
@@ -138,8 +138,8 @@ const GuestVideoCard: React.FC<{
   );
 };
 
-// ── Phone preview (for projector preview inside admin) ────────────────────────
-const PhonePreviewUnit: React.FC<{ participant: RemoteParticipant; count: number }> = ({ participant, count }) => {
+// ── Tablet preview unit (landscape 4:3, for projector preview inside admin) ──
+const TabletPreviewUnit: React.FC<{ participant: RemoteParticipant; count: number }> = ({ participant, count }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -156,22 +156,23 @@ const PhonePreviewUnit: React.FC<{ participant: RemoteParticipant; count: number
     };
   }, [participant]);
 
-  const h = count === 1 ? '84%' : count === 2 ? '80%' : '68%';
+  const h = count === 1 ? '80%' : '70%';
 
   return (
-    <div className="pp-phone" style={{ height: h }}>
-      <div className="pp-btn" style={{ left: '-3px', top: '18%', height: '18px' }} />
-      <div className="pp-btn" style={{ left: '-3px', top: '27%', height: '32px' }} />
-      <div className="pp-btn" style={{ right: '-3px', top: '22%', height: '40px' }} />
-      <div className="pp-screen">
-        <div className="pp-island"><div className="pp-camera" /></div>
-        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute top-7 inset-x-0 flex justify-center z-10 pointer-events-none">
+    <div className="pp-tablet" style={{ height: h }}>
+      {/* Top-edge buttons */}
+      <div className="pp-tbtn-h" style={{ top: '-3px', left: '8%',  width: '14px' }} />
+      <div className="pp-tbtn-h" style={{ top: '-3px', left: '13%', width: '14px' }} />
+      <div className="pp-tbtn-h" style={{ top: '-3px', right: '8%', width: '20px' }} />
+      {/* Camera dot — right bezel */}
+      <div className="pp-tcam" />
+      <div className="pp-tscreen">
+        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-contain bg-black" />
+        <div className="absolute top-2 inset-x-0 flex justify-center z-10 pointer-events-none">
           <div className="bg-rose-600/90 text-white px-1.5 py-0.5 rounded-full text-[7px] font-black flex items-center gap-1">
             <div className="w-1 h-1 bg-white rounded-full animate-pulse" /> EN VIVO
           </div>
         </div>
-        <div className="pp-home-bar" />
       </div>
     </div>
   );
@@ -207,10 +208,10 @@ const ProjectorPreview: React.FC<{
         <p className="text-white/30 text-[9px] uppercase tracking-[0.3em]">del momento</p>
       </div>
     ) : (
-      /* Phone mockups */
-      <div className="absolute inset-0 flex items-center justify-center gap-2">
+      /* Tablet mockups */
+      <div className="absolute inset-0 flex items-center justify-center gap-3">
         {selectedParticipants.map(p => (
-          <PhonePreviewUnit key={p.identity} participant={p} count={selectedParticipants.length} />
+          <TabletPreviewUnit key={p.identity} participant={p} count={selectedParticipants.length} />
         ))}
       </div>
     )}
@@ -361,10 +362,10 @@ const LiveControl: React.FC = () => {
     let next: string[];
     if (isAlreadySelected) {
       next = current.filter(id => id !== identity);
-    } else if (current.length < 3) {
+    } else if (current.length < 2) {
       next = [...current, identity];
     } else {
-      return; // already 3 selected
+      return; // already 2 selected
     }
     selectedIdentitiesRef.current = next;
     setSelectedIdentities(next);
@@ -508,7 +509,7 @@ const LiveControl: React.FC = () => {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-neutral-500">En proyector</span>
-                <span className="text-xs font-bold text-orange-400">{selectedIdentities.length}/3</span>
+                <span className="text-xs font-bold text-orange-400">{selectedIdentities.length}/2</span>
               </div>
               {isRoomOpen && roomId && (
                 <div className="flex items-center justify-between">
@@ -561,8 +562,8 @@ const LiveControl: React.FC = () => {
                 <span className="text-[10px] bg-neutral-800 text-neutral-500 px-2 py-0.5 rounded-full">{participants.length}</span>
               </h3>
               <div className="flex items-center gap-2 text-[11px] text-neutral-500">
-                <div className={`w-2 h-2 rounded-full ${selectedIdentities.length >= 3 ? 'bg-orange-500' : 'bg-neutral-700'}`} />
-                {selectedIdentities.length}/3 en proyector
+                <div className={`w-2 h-2 rounded-full ${selectedIdentities.length >= 2 ? 'bg-orange-500' : 'bg-neutral-700'}`} />
+                {selectedIdentities.length}/2 en proyector
               </div>
             </div>
 
@@ -588,7 +589,7 @@ const LiveControl: React.FC = () => {
                     selectionIndex={selectedIdentities.includes(participant.identity)
                       ? selectedIdentities.indexOf(participant.identity)
                       : null}
-                    disabled={selectedIdentities.length >= 3 && !selectedIdentities.includes(participant.identity)}
+                    disabled={selectedIdentities.length >= 2 && !selectedIdentities.includes(participant.identity)}
                     onSelect={() => handleProjectStream(participant.identity)}
                     onRemove={() => handleRemoveStream(participant.identity)}
                   />
@@ -616,14 +617,12 @@ const LiveControl: React.FC = () => {
         @keyframes pvb2 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(-10%,8%) scale(1.08)} 100%{transform:translate(6%,-10%) scale(0.96)} }
         @keyframes pvb3 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(12%,-6%) scale(1.12)} 100%{transform:translate(-8%,5%) scale(0.9)} }
 
-        /* ── Phone preview unit ── */
-        .pp-phone { position:relative; aspect-ratio:9/19.5; background:linear-gradient(160deg,#3a3a3c 0%,#1c1c1e 40%,#2c2c2e 100%); border-radius:26px; padding:5px; box-shadow:0 0 0 1px rgba(255,255,255,0.12),0 0 0 2px rgba(0,0,0,0.8),0 20px 60px rgba(0,0,0,0.9),0 0 30px rgba(249,115,22,0.1),inset 0 1px 0 rgba(255,255,255,0.18); animation:ppfloat 6s ease-in-out infinite; }
-        @keyframes ppfloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        .pp-btn { position:absolute; width:3px; background:linear-gradient(180deg,#3a3a3c,#2c2c2e); border-radius:2px; }
-        .pp-screen { width:100%; height:100%; background:#000; border-radius:22px; overflow:hidden; position:relative; }
-        .pp-island { position:absolute; top:6px; left:50%; transform:translateX(-50%); width:36%; height:18px; background:#000; border-radius:12px; z-index:20; display:flex; align-items:center; justify-content:flex-end; padding-right:5px; box-shadow:0 0 0 1px rgba(255,255,255,0.06); }
-        .pp-camera { width:7px; height:7px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#1a3a5c,#0a0a14); }
-        .pp-home-bar { position:absolute; bottom:5px; left:50%; transform:translateX(-50%); width:36%; height:3px; background:rgba(255,255,255,0.25); border-radius:2px; z-index:20; }
+        /* ── Tablet preview unit (landscape 4:3) ── */
+        .pp-tablet { position:relative; aspect-ratio:4/3; background:linear-gradient(160deg,#3a3a3c 0%,#1c1c1e 40%,#2c2c2e 100%); border-radius:14px; padding:5px; box-shadow:0 0 0 1px rgba(255,255,255,0.12),0 0 0 2px rgba(0,0,0,0.8),0 16px 50px rgba(0,0,0,0.9),0 0 28px rgba(249,115,22,0.1),inset 0 1px 0 rgba(255,255,255,0.18); animation:ppfloat 6s ease-in-out infinite; }
+        @keyframes ppfloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+        .pp-tbtn-h { position:absolute; height:3px; background:linear-gradient(90deg,#3a3a3c,#2c2c2e); border-radius:2px; }
+        .pp-tcam { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:6px; height:6px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#1a3a5c,#0a0a14); box-shadow:0 0 0 1px rgba(255,255,255,0.04); z-index:20; }
+        .pp-tscreen { width:100%; height:100%; background:#000; border-radius:10px; overflow:hidden; position:relative; }
 
         .custom-scrollbar::-webkit-scrollbar { width:4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background:transparent; }

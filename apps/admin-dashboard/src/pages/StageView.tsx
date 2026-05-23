@@ -15,9 +15,7 @@ const readSelectedIdentities = (participant: RemoteParticipant | undefined): str
   if (!participant?.metadata) return [];
   try {
     const meta = JSON.parse(participant.metadata);
-    // New format: array
     if (Array.isArray(meta.selectedIdentities)) return meta.selectedIdentities;
-    // Backward compat: single string
     if (typeof meta.selectedIdentity === 'string' && meta.selectedIdentity) {
       return [meta.selectedIdentity];
     }
@@ -57,10 +55,11 @@ const QRCorner: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, guestU
   </div>
 );
 
-// ── Phone mockup with live video ─────────────────────────────────────────────
-const PhoneMockup: React.FC<{ participant: RemoteParticipant; heightVh: number }> = ({
+// ── Tablet mockup with live video (landscape 4:3) ────────────────────────────
+const TabletMockup: React.FC<{ participant: RemoteParticipant; heightVh: number; count: number }> = ({
   participant,
   heightVh,
+  count,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -89,46 +88,42 @@ const PhoneMockup: React.FC<{ participant: RemoteParticipant; heightVh: number }
     };
   }, [participant]);
 
-  const borderRadius = heightVh >= 78 ? 52 : heightVh >= 68 ? 46 : 40;
-  const screenRadius = borderRadius - 8;
-
   return (
     <div
-      className="phone-outer"
-      style={{ height: `${heightVh}vh`, borderRadius: `${borderRadius}px` }}
+      className="tablet-outer"
+      style={{
+        height: `${heightVh}vh`,
+        maxWidth: count === 2 ? '44vw' : '80vw',
+      }}
     >
-      {/* Volume buttons — left */}
-      <div className="phone-btn" style={{ left: '-5px', top: '18%', height: '28px' }} />
-      <div className="phone-btn" style={{ left: '-5px', top: '28%', height: '52px' }} />
-      {/* Power button — right */}
-      <div className="phone-btn" style={{ right: '-5px', top: '24%', height: '64px' }} />
+      {/* Volume buttons — top edge, left area */}
+      <div className="tablet-btn-h" style={{ top: '-5px', left: '8%',  width: '22px' }} />
+      <div className="tablet-btn-h" style={{ top: '-5px', left: '14%', width: '22px' }} />
+      {/* Power button — top edge, right area */}
+      <div className="tablet-btn-h" style={{ top: '-5px', right: '8%', width: '32px' }} />
+      {/* Camera — right bezel, centered */}
+      <div className="tablet-cam" />
 
       {/* Screen */}
-      <div className="phone-screen" style={{ borderRadius: `${screenRadius}px` }}>
-        {/* Dynamic island */}
-        <div className="phone-island">
-          <div className="phone-camera" />
-        </div>
-
-        {/* Video */}
+      <div className="tablet-screen">
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-contain"
         />
 
-        {/* ON AIR badge inside screen */}
-        <div className="absolute top-12 left-0 right-0 flex justify-center z-10 pointer-events-none">
+        {/* Dark bg behind video so letterbox bars look clean */}
+        <div className="absolute inset-0 bg-black -z-[1]" />
+
+        {/* ON AIR badge */}
+        <div className="absolute top-3 left-0 right-0 flex justify-center z-10 pointer-events-none">
           <div className="bg-rose-600/90 backdrop-blur text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 shadow-lg">
             <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
             EN VIVO
           </div>
         </div>
-
-        {/* Home bar */}
-        <div className="phone-home-bar" />
       </div>
     </div>
   );
@@ -181,8 +176,8 @@ const WaitingScreen: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, g
   </div>
 );
 
-// height per count
-const PHONE_HEIGHTS: Record<number, number> = { 1: 78, 2: 68, 3: 55 };
+// Height (vh) for each tablet by stream count
+const TABLET_HEIGHTS: Record<number, number> = { 1: 62, 2: 56 };
 
 // ── Main StageView ───────────────────────────────────────────────────────────
 const StageView: React.FC = () => {
@@ -239,11 +234,9 @@ const StageView: React.FC = () => {
         room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
           try {
             const msg = JSON.parse(new TextDecoder().decode(payload));
-            // New multi-stream format
             if (msg.type === 'SELECT_STREAMS' && Array.isArray(msg.identities)) {
-              setSelectedIdentities(msg.identities);
+              setSelectedIdentities(msg.identities.slice(0, 2));
             }
-            // Backward compat: old single-stream format
             if (msg.type === 'SELECT_STREAM' && typeof msg.participantIdentity === 'string') {
               setSelectedIdentities(msg.participantIdentity ? [msg.participantIdentity] : []);
             }
@@ -253,7 +246,7 @@ const StageView: React.FC = () => {
         room.on(RoomEvent.ParticipantMetadataChanged, (_m, participant) => {
           if (participant.identity === 'admin') {
             const ids = readSelectedIdentities(participant as RemoteParticipant);
-            if (ids.length > 0) setSelectedIdentities(ids);
+            if (ids.length > 0) setSelectedIdentities(ids.slice(0, 2));
           }
         });
 
@@ -268,7 +261,7 @@ const StageView: React.FC = () => {
         const tryReadAdmin = () => {
           const adminP = roomRef.current?.remoteParticipants.get('admin');
           const ids = readSelectedIdentities(adminP);
-          if (ids.length > 0) setSelectedIdentities(ids);
+          if (ids.length > 0) setSelectedIdentities(ids.slice(0, 2));
         };
         tryReadAdmin();
         setTimeout(tryReadAdmin, 800);
@@ -284,13 +277,12 @@ const StageView: React.FC = () => {
     return () => { roomRef.current?.disconnect(); };
   }, [roomId]);
 
-  // Resolve participant objects in selection order, skip missing ones
   const selectedParticipants = selectedIdentities
     .map(id => participants.get(id))
     .filter((p): p is RemoteParticipant => !!p);
 
   const count = selectedParticipants.length;
-  const phoneHeight = PHONE_HEIGHTS[count] ?? 78;
+  const tabletHeight = TABLET_HEIGHTS[count] ?? 62;
 
   if (error) {
     return (
@@ -302,18 +294,21 @@ const StageView: React.FC = () => {
 
   return (
     <div className="fixed inset-0 overflow-hidden">
-      {/* Animated background — always on */}
       <AnimatedBg />
 
-      {/* Content layer */}
       <div className="absolute inset-0 flex items-center justify-center z-10">
         {count > 0 ? (
           <div
             className="flex items-center justify-center"
-            style={{ gap: count === 3 ? '16px' : '24px' }}
+            style={{ gap: count === 2 ? '32px' : '0' }}
           >
             {selectedParticipants.map(p => (
-              <PhoneMockup key={p.identity} participant={p} heightVh={phoneHeight} />
+              <TabletMockup
+                key={p.identity}
+                participant={p}
+                heightVh={tabletHeight}
+                count={count}
+              />
             ))}
           </div>
         ) : (
@@ -321,16 +316,13 @@ const StageView: React.FC = () => {
         )}
       </div>
 
-      {/* Persistent overlays when streaming */}
       {count > 0 && (
         <>
-          {/* Brand */}
           <div className="absolute bottom-8 left-10 opacity-20 pointer-events-none z-20">
             <p className="text-white font-black tracking-[0.3em] text-xl">
               9669<span className="text-orange-500">.STUDIO</span>
             </p>
           </div>
-          {/* QR corner */}
           {qrUrl && <QRCorner qrUrl={qrUrl} guestUrl={guestUrl} />}
         </>
       )}
@@ -393,72 +385,54 @@ const StageView: React.FC = () => {
           100% { transform: translate(70px, -50px) scale(0.95); }
         }
 
-        /* ── Phone mockup ── */
-        .phone-outer {
+        /* ── Tablet mockup (landscape 4:3) ── */
+        .tablet-outer {
           position: relative;
-          aspect-ratio: 9 / 19.5;
+          aspect-ratio: 4 / 3;
           background: linear-gradient(160deg, #3a3a3c 0%, #1c1c1e 40%, #2c2c2e 100%);
-          padding: 9px;
+          border-radius: 20px;
+          padding: 10px;
           box-shadow:
             0 0 0 1px rgba(255,255,255,0.12),
             0 0 0 2px rgba(0,0,0,0.8),
-            0 40px 120px rgba(0,0,0,0.9),
-            0 0 60px rgba(249,115,22,0.12),
+            0 30px 90px rgba(0,0,0,0.9),
+            0 0 60px rgba(249,115,22,0.1),
             inset 0 1px 0 rgba(255,255,255,0.18),
             inset 0 -1px 0 rgba(0,0,0,0.5);
-          animation: phone-float 6s ease-in-out infinite;
+          animation: tablet-float 6s ease-in-out infinite;
         }
-        @keyframes phone-float {
+        @keyframes tablet-float {
           0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-10px); }
+          50%       { transform: translateY(-8px); }
         }
-        .phone-btn {
+        /* Horizontal buttons (top edge) */
+        .tablet-btn-h {
           position: absolute;
-          width: 4px;
-          background: linear-gradient(180deg, #3a3a3c, #2c2c2e);
+          height: 4px;
+          background: linear-gradient(90deg, #3a3a3c, #2c2c2e);
           border-radius: 3px;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
         }
-        .phone-screen {
+        /* Camera dot — right bezel, centered vertically */
+        .tablet-cam {
+          position: absolute;
+          right: 5px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: radial-gradient(circle at 35% 35%, #1a3a5c, #0a0a14);
+          box-shadow: 0 0 0 2px #0d0d1a, inset 0 0 0 2px rgba(255,255,255,0.04);
+          z-index: 20;
+        }
+        .tablet-screen {
           width: 100%;
           height: 100%;
           background: #000;
+          border-radius: 12px;
           overflow: hidden;
           position: relative;
-        }
-        .phone-island {
-          position: absolute;
-          top: 12px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 34%;
-          height: 32px;
-          background: #000;
-          border-radius: 20px;
-          z-index: 20;
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          padding-right: 8px;
-          box-shadow: 0 0 0 1px rgba(255,255,255,0.06);
-        }
-        .phone-camera {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          background: radial-gradient(circle at 35% 35%, #1a3a5c, #0a0a14);
-          box-shadow: 0 0 0 2px #0d0d1a, inset 0 0 0 3px rgba(255,255,255,0.05);
-        }
-        .phone-home-bar {
-          position: absolute;
-          bottom: 8px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 36%;
-          height: 5px;
-          background: rgba(255,255,255,0.25);
-          border-radius: 3px;
-          z-index: 20;
         }
       `}</style>
     </div>
