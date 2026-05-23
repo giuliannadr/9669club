@@ -167,7 +167,7 @@ const TabletPreviewUnit: React.FC<{ participant: RemoteParticipant; count: numbe
       {/* Camera dot — right bezel */}
       <div className="pp-tcam" />
       <div className="pp-tscreen">
-        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-contain bg-black" />
+        <video ref={videoRef} autoPlay playsInline muted className="tab-video" />
         <div className="absolute top-2 inset-x-0 flex justify-center z-10 pointer-events-none">
           <div className="bg-rose-600/90 text-white px-1.5 py-0.5 rounded-full text-[7px] font-black flex items-center gap-1">
             <div className="w-1 h-1 bg-white rounded-full animate-pulse" /> EN VIVO
@@ -623,6 +623,8 @@ const LiveControl: React.FC = () => {
         .pp-tbtn-h { position:absolute; height:3px; background:linear-gradient(90deg,#3a3a3c,#2c2c2e); border-radius:2px; }
         .pp-tcam { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:6px; height:6px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#1a3a5c,#0a0a14); box-shadow:0 0 0 1px rgba(255,255,255,0.04); z-index:20; }
         .pp-tscreen { width:100%; height:100%; background:#000; border-radius:10px; overflow:hidden; position:relative; }
+        /* Rotate portrait stream to fill 4:3 landscape frame */
+        .tab-video { position:absolute; top:50%; left:50%; width:75%; height:133.34%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
 
         .custom-scrollbar::-webkit-scrollbar { width:4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background:transparent; }

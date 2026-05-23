@@ -106,16 +106,14 @@ const TabletMockup: React.FC<{ participant: RemoteParticipant; heightVh: number;
 
       {/* Screen */}
       <div className="tablet-screen">
+        {/* Rotate portrait stream 90° so landscape filming fills the 4:3 frame */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="absolute inset-0 w-full h-full object-contain"
+          className="tab-video"
         />
-
-        {/* Dark bg behind video so letterbox bars look clean */}
-        <div className="absolute inset-0 bg-black -z-[1]" />
 
         {/* ON AIR badge */}
         <div className="absolute top-3 left-0 right-0 flex justify-center z-10 pointer-events-none">
@@ -433,6 +431,20 @@ const StageView: React.FC = () => {
           border-radius: 12px;
           overflow: hidden;
           position: relative;
+        }
+        /* Rotate portrait stream to fill landscape 4:3 frame without cropping */
+        .tab-video {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          /* After 90° rotation: visual-width = CSS height, visual-height = CSS width */
+          /* 4:3 container → H = W*3/4                                               */
+          /* We want visual-width = W  → CSS height = W   → height: 133.33%          */
+          /* We want visual-height = H → CSS width  = H   → width:  75%              */
+          width: 75%;
+          height: 133.34%;
+          transform: translate(-50%, -50%) rotate(90deg);
+          object-fit: cover;
         }
       `}</style>
     </div>
