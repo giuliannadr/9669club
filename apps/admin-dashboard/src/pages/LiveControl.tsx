@@ -157,7 +157,7 @@ const TabletPreviewUnit: React.FC<{ participant: RemoteParticipant; count: numbe
     };
   }, [participant]);
 
-  const h = count === 1 ? '80%' : '70%';
+  const h = count === 1 ? '68%' : '56%';
 
   return (
     <div className="pp-tablet" style={{ height: h }}>

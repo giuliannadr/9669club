@@ -93,7 +93,7 @@ const TabletMockup: React.FC<{ participant: RemoteParticipant; heightVh: number;
       className="tablet-outer"
       style={{
         height: `${heightVh}vh`,
-        maxWidth: count === 2 ? '44vw' : '80vw',
+        maxWidth: count === 2 ? '38vw' : '70vw',
       }}
     >
       {/* Volume buttons — top edge, left area */}
@@ -175,7 +175,7 @@ const WaitingScreen: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, g
 );
 
 // Height (vh) for each tablet by stream count
-const TABLET_HEIGHTS: Record<number, number> = { 1: 62, 2: 56 };
+const TABLET_HEIGHTS: Record<number, number> = { 1: 52, 2: 44 };
 
 // ── Main StageView ───────────────────────────────────────────────────────────
 const StageView: React.FC = () => {
