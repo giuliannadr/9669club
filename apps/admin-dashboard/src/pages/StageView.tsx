@@ -100,7 +100,8 @@ const GrainCanvas: React.FC = () => {
 };
 
 // ── Retro camcorder HUD — per video slot ──────────────────────────────────────
-// compact=true when shown inside a sub-slot (multiple cameras)
+// Each info block is absolutely positioned near its corner, clearing the bracket.
+// compact=true for 3–4 slot layouts (smaller fonts, tighter brackets).
 const RetroCamHUD: React.FC<{
   partyName: string;
   liveTime: number;
@@ -123,18 +124,29 @@ const RetroCamHUD: React.FC<{
   const clockStr = now.toTimeString().slice(0, 8);
   const name = (partyName || 'EVENT').toUpperCase();
 
-  // Sizes adapt for compact (multi-slot) vs full-screen
   const fs = {
-    base:    compact ? 8  : 13,
-    name:    compact ? 13 : 22,   // party name — noticeably larger
-    timecode: compact ? 12 : 20,
-    clock:   compact ? 13 : 22,
-    tiny:    compact ? 7  : 10,
-    icon:    compact ? 8  : 11,
+    base:     compact ? 8  : 12,
+    name:     compact ? 12 : 20,
+    timecode: compact ? 11 : 18,
+    clock:    compact ? 12 : 20,
+    tiny:     compact ? 6  : 9,
+    icon:     compact ? 7  : 10,
   };
 
-  // Bracket size + position — defined so text can clear them with percentage padding
-  const bSize = compact ? 18 : 30;
+  // Bracket: size + anchor distance from each edge
+  const bSize  = compact ? 16 : 26;  // bracket arm length (px)
+  const bEdgeV = '4%';               // distance from top/bottom edge
+  const bEdgeH = '2.5%';            // distance from left/right edge
+
+  // Text offset from edge = bracket arm + small gap
+  // Using calc() so it works at any resolution
+  const gap   = compact ? 6 : 8;
+  const tOff  = `calc(${bEdgeV} + ${bSize + gap}px)`;   // top/bottom text offset
+  const hOff  = bEdgeH;                                   // left/right — align with bracket
+
+  const color     = 'rgba(255,255,255,0.82)';
+  const colorDim  = 'rgba(255,255,255,0.45)';
+  const colorFaint= 'rgba(255,255,255,0.30)';
 
   return (
     <div
@@ -143,149 +155,173 @@ const RetroCamHUD: React.FC<{
     >
       {/* Vignette */}
       <div className="absolute inset-0" style={{
-        background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.75) 100%)',
+        background: 'radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.72) 100%)',
       }} />
 
       {/* Grain */}
       <GrainCanvas />
 
-      {/* Corner brackets — anchored to corners, text content starts AFTER them */}
+      {/* ── Corner brackets ── */}
       {[
-        { top: '5%',    left: '3%',   borderTop: '2px solid rgba(255,255,255,0.65)', borderLeft: '2px solid rgba(255,255,255,0.65)' },
-        { top: '5%',    right: '3%',  borderTop: '2px solid rgba(255,255,255,0.65)', borderRight: '2px solid rgba(255,255,255,0.65)' },
-        { bottom: '5%', left: '3%',   borderBottom: '2px solid rgba(255,255,255,0.65)', borderLeft: '2px solid rgba(255,255,255,0.65)' },
-        { bottom: '5%', right: '3%',  borderBottom: '2px solid rgba(255,255,255,0.65)', borderRight: '2px solid rgba(255,255,255,0.65)' },
+        { top: bEdgeV,    left: bEdgeH,  borderTop: `2px solid ${color}`, borderLeft: `2px solid ${color}` },
+        { top: bEdgeV,    right: bEdgeH, borderTop: `2px solid ${color}`, borderRight: `2px solid ${color}` },
+        { bottom: bEdgeV, left: bEdgeH,  borderBottom: `2px solid ${color}`, borderLeft: `2px solid ${color}` },
+        { bottom: bEdgeV, right: bEdgeH, borderBottom: `2px solid ${color}`, borderRight: `2px solid ${color}` },
       ].map((s, i) => (
         <div key={i} className="absolute" style={{ width: bSize, height: bSize, ...s }} />
       ))}
 
-      {/* Center crosshair */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-15">
-        <div style={{ width: bSize + 10, height: bSize + 10, position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 2, background: 'white' }} />
-          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 2, background: 'white' }} />
+      {/* ── Center crosshair ── */}
+      <div className="absolute inset-0 flex items-center justify-center" style={{ opacity: 0.12 }}>
+        <div style={{ width: compact ? 28 : 38, height: compact ? 28 : 38, position: 'relative' }}>
+          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'white' }} />
+          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'white' }} />
         </div>
       </div>
 
-      {/*
-        TOP BAR
-        Horizontal padding (px) = 5% + bracketSize + gap → use ~11% so text is
-        always clear of the corner bracket on both sides.
-        Vertical padding (pt)   = 6% + bracketHeight  → use ~13% to clear top brackets.
-      */}
-      <div
-        className="absolute top-0 left-0 right-0 flex justify-between items-start"
-        style={{
-          padding: `13% 11% 0`,
-          fontSize: fs.base,
-          color: 'rgba(255,255,255,0.82)',
-          lineHeight: 1.45,
-        }}
-      >
-        {/* Top-left */}
-        <div>
-          <div className="flex gap-2">
-            <span>RKT MODE</span>
-            <span style={{ color: 'rgba(255,255,255,0.35)' }}>▌▌▌▌▌</span>
-            <span>SEÑAL 100%</span>
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.45)' }}>AUTO</div>
-          <div className="flex items-center gap-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-            <span style={{
-              fontSize: fs.icon,
-              border: '1px solid rgba(255,255,255,0.35)',
-              padding: '0 2px',
-            }}>▶</span>
-            <span>{name} CAME</span>
-          </div>
+      {/* ══ TOP-LEFT — mode / signal / cam label ══ */}
+      <div className="absolute" style={{
+        top: tOff, left: hOff,
+        fontSize: fs.base, color: colorDim, lineHeight: 1.5,
+      }}>
+        <div style={{ color, display: 'flex', gap: compact ? 6 : 10, alignItems: 'center' }}>
+          <span>RKT MODE</span>
+          <span style={{ color: colorFaint, letterSpacing: '-1px' }}>▌▌▌▌▌</span>
+          <span>SEÑAL 100%</span>
         </div>
-
-        {/* Top-center: timecode */}
-        <div className="flex flex-col items-center">
-          <div style={{
-            border: '1px solid rgba(255,255,255,0.4)',
-            padding: compact ? '2px 6px' : '3px 10px',
-            letterSpacing: '0.12em',
-            fontSize: fs.timecode,
-            fontWeight: 700,
-          }}>
-            {timecode}
-          </div>
-          <div className="flex items-center gap-1 mt-0.5" style={{ fontSize: fs.tiny, color: 'rgba(255,50,50,0.9)' }}>
-            <span style={{
-              width: compact ? 5 : 7,
-              height: compact ? 5 : 7,
-              borderRadius: '50%',
-              background: 'rgba(255,50,50,0.9)',
-              display: 'inline-block',
-              animation: 'stagePulse 1s infinite',
-            }} />
-            REC
-          </div>
-        </div>
-
-        {/* Top-right: party name — bigger, clear of bracket */}
-        <div className="text-right">
-          <div style={{
-            fontWeight: 900,
-            letterSpacing: '0.07em',
-            fontSize: fs.name,
-            lineHeight: 1.1,
-            textShadow: '0 1px 4px rgba(0,0,0,0.6)',
-          }}>
-            {name}<br />
-            <span style={{ fontSize: fs.base * 0.85, fontWeight: 700, letterSpacing: '0.2em', opacity: 0.85 }}>CAM</span>
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: fs.tiny, marginTop: 2 }}>
-            -0.8 <span style={{ letterSpacing: '-1px' }}>▌▌▌▌▌</span>
-          </div>
+        <div>AUTO</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{
+            fontSize: fs.icon,
+            border: `1px solid ${colorDim}`,
+            padding: '0 2px',
+            lineHeight: 1.4,
+          }}>▶</span>
+          <span>{name} CAME</span>
         </div>
       </div>
 
-      {/*
-        BOTTOM BAR
-        Mirror of top: 13% bottom padding to clear bottom brackets.
-      */}
-      <div
-        className="absolute bottom-0 left-0 right-0 flex justify-between items-end"
-        style={{
-          padding: `0 11% 13%`,
+      {/* ══ TOP-CENTER — timecode + REC ══ */}
+      <div style={{
+        position: 'absolute',
+        top: tOff,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: compact ? 2 : 3,
+      }}>
+        <div style={{
+          border: `1px solid rgba(255,255,255,0.5)`,
+          padding: compact ? '2px 6px' : '3px 12px',
+          letterSpacing: '0.14em',
+          fontSize: fs.timecode,
+          fontWeight: 700,
+          color,
+        }}>
+          {timecode}
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          fontSize: fs.tiny, color: 'rgba(255,50,50,0.9)',
+        }}>
+          <span style={{
+            width: compact ? 4 : 6, height: compact ? 4 : 6,
+            borderRadius: '50%', background: 'rgba(255,50,50,0.9)',
+            display: 'inline-block', animation: 'stagePulse 1s infinite',
+          }} />
+          REC
+        </div>
+      </div>
+
+      {/* ══ TOP-RIGHT — party name (big) ══ */}
+      <div style={{
+        position: 'absolute',
+        top: tOff,
+        right: hOff,
+        textAlign: 'right',
+        lineHeight: 1.15,
+      }}>
+        <div style={{
+          fontSize: fs.name,
+          fontWeight: 900,
+          color,
+          letterSpacing: '0.06em',
+          textShadow: '0 1px 6px rgba(0,0,0,0.7)',
+        }}>
+          {name}
+        </div>
+        <div style={{
           fontSize: fs.base,
-          color: 'rgba(255,255,255,0.72)',
-          lineHeight: 1.5,
-        }}
-      >
-        {/* Bottom-left */}
-        <div>
-          <div style={{ color: 'rgba(255,255,255,0.4)' }}>RKT</div>
-          <div style={{
-            border: '1px solid rgba(255,255,255,0.4)',
-            padding: '0 3px',
-            display: 'inline-block',
-            color: 'rgba(255,255,255,0.55)',
-          }}>TOUR</div>
-          <div style={{ color: 'rgba(255,255,255,0.4)' }}>PISTA ON</div>
-          <div style={{ color: 'rgba(255,255,255,0.4)' }}>AWB</div>
-          <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: fs.tiny }}>
-            RKT LVL <span style={{ letterSpacing: '-1px' }}>▌▌▌▌▌▌▌▌▌▌</span>
-          </div>
+          fontWeight: 700,
+          letterSpacing: '0.25em',
+          color: colorDim,
+          marginTop: compact ? 1 : 2,
+        }}>
+          CAM
         </div>
-
-        {/* Bottom-center: real clock */}
-        <div className="text-center">
-          <div style={{ fontSize: fs.tiny, letterSpacing: '0.35em', color: 'rgba(255,255,255,0.4)' }}>AFTER TIME</div>
-          <div style={{ fontSize: fs.clock, fontWeight: 700, letterSpacing: '0.1em' }}>{clockStr}</div>
+        <div style={{ fontSize: fs.tiny, color: colorFaint, marginTop: compact ? 1 : 3 }}>
+          -0.8 <span style={{ letterSpacing: '-1px' }}>▌▌▌▌</span>
         </div>
+      </div>
 
-        {/* Bottom-right */}
-        <div className="text-right" style={{ color: 'rgba(255,255,255,0.45)' }}>
-          <div>BPM 150</div>
-          <div>1/200</div>
+      {/* ══ BOTTOM-LEFT — RKT / TOUR / PISTA / AWB / level ══ */}
+      <div style={{
+        position: 'absolute',
+        bottom: tOff,
+        left: hOff,
+        fontSize: fs.base, color: colorDim, lineHeight: 1.5,
+      }}>
+        <div style={{ color: colorFaint }}>RKT</div>
+        <div style={{
+          border: `1px solid ${colorDim}`,
+          padding: '0 3px',
+          display: 'inline-block',
+          color: colorDim,
+          lineHeight: 1.4,
+        }}>TOUR</div>
+        <div>PISTA ON</div>
+        <div>AWB</div>
+        <div style={{ fontSize: fs.tiny, color: colorFaint }}>
+          RKT LVL <span style={{ letterSpacing: '-1px' }}>▌▌▌▌▌▌▌▌▌</span>
+        </div>
+      </div>
+
+      {/* ══ BOTTOM-CENTER — real clock ══ */}
+      <div style={{
+        position: 'absolute',
+        bottom: tOff,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        textAlign: 'center',
+      }}>
+        <div style={{ fontSize: fs.tiny, letterSpacing: '0.35em', color: colorFaint }}>
+          AFTER TIME
+        </div>
+        <div style={{ fontSize: fs.clock, fontWeight: 700, letterSpacing: '0.1em', color }}>
+          {clockStr}
+        </div>
+      </div>
+
+      {/* ══ BOTTOM-RIGHT — exposure / BPM ══ */}
+      <div style={{
+        position: 'absolute',
+        bottom: tOff,
+        right: hOff,
+        textAlign: 'right',
+        fontSize: fs.base, color: colorDim, lineHeight: 1.5,
+      }}>
+        <div style={{ color: colorFaint }}>1/200</div>
+        <div style={{ color: colorFaint }}>F 2.8</div>
+        <div>BPM 150</div>
+        <div style={{ fontSize: fs.tiny, color: colorFaint }}>
+          <span style={{ letterSpacing: '-1px' }}>▌▌▌▌▌▌▌</span> 0dB
         </div>
       </div>
 
       {/* Scan lines */}
-      <div className="absolute inset-0 pointer-events-none" style={{
+      <div className="absolute inset-0" style={{
         background: 'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px)',
         zIndex: 9,
       }} />
