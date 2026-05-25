@@ -142,9 +142,66 @@ const GuestVideoCard: React.FC<{
   );
 };
 
+// ── Retro overlay for admin preview (mini version — no text, just vignette+brackets) ──
+const RetroPreviewOverlay: React.FC<{ partyName: string }> = ({ partyName }) => {
+  const name = (partyName || 'EVENT').toUpperCase();
+  return (
+    <div className="absolute inset-0 pointer-events-none select-none z-10" style={{ fontFamily: 'monospace' }}>
+      {/* Vignette */}
+      <div className="absolute inset-0" style={{
+        background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.72) 100%)',
+      }} />
+      {/* Corner brackets */}
+      {[
+        { top: '6%',    left: '4%',   borderTop: '1.5px solid rgba(255,255,255,0.6)', borderLeft: '1.5px solid rgba(255,255,255,0.6)' },
+        { top: '6%',    right: '4%',  borderTop: '1.5px solid rgba(255,255,255,0.6)', borderRight: '1.5px solid rgba(255,255,255,0.6)' },
+        { bottom: '6%', left: '4%',   borderBottom: '1.5px solid rgba(255,255,255,0.6)', borderLeft: '1.5px solid rgba(255,255,255,0.6)' },
+        { bottom: '6%', right: '4%',  borderBottom: '1.5px solid rgba(255,255,255,0.6)', borderRight: '1.5px solid rgba(255,255,255,0.6)' },
+      ].map((s, i) => (
+        <div key={i} className="absolute" style={{ width: 12, height: 12, ...s }} />
+      ))}
+      {/* Party name — top right, clear of bracket */}
+      <div className="absolute" style={{
+        top: '16%', right: '7%',
+        textAlign: 'right',
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 7,
+        fontWeight: 900,
+        letterSpacing: '0.06em',
+        lineHeight: 1.2,
+        textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+      }}>
+        {name}<br />
+        <span style={{ fontSize: 6, fontWeight: 700, letterSpacing: '0.2em', opacity: 0.75 }}>CAM</span>
+      </div>
+      {/* REC dot — top center */}
+      <div className="absolute" style={{ top: '14%', left: '50%', transform: 'translateX(-50%)' }}>
+        <div className="flex items-center gap-1" style={{ color: 'rgba(255,50,50,0.9)', fontSize: 6 }}>
+          <span style={{
+            width: 4, height: 4, borderRadius: '50%',
+            background: 'rgba(255,50,50,0.9)',
+            display: 'inline-block',
+            animation: 'lcPulse 1s infinite',
+          }} />
+          REC
+        </div>
+      </div>
+      {/* Scan lines */}
+      <div className="absolute inset-0" style={{
+        background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 3px)',
+      }} />
+    </div>
+  );
+};
+
 // ── Video preview slot (raw video, rotated, inside the admin projector preview) ──
 // Container is 16:9. Rotation math: slot (W/count × H) → video css w=H/slotW×100%, h=slotW/H×100%
-const VideoPreviewSlot: React.FC<{ participant: RemoteParticipant; count: number }> = ({ participant, count }) => {
+const VideoPreviewSlot: React.FC<{
+  participant: RemoteParticipant;
+  count: number;
+  activeFilter: FilterId;
+  partyName: string;
+}> = ({ participant, count, activeFilter, partyName }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -172,6 +229,7 @@ const VideoPreviewSlot: React.FC<{ participant: RemoteParticipant; count: number
     height: `${100 * slotRatio}%`,
     transform: 'translate(-50%, -50%) rotate(90deg)',
     objectFit: 'cover',
+    filter: activeFilter === 'retro' ? 'grayscale(1) contrast(1.08) brightness(0.88)' : 'none',
   };
 
   const slotStyle: React.CSSProperties =
@@ -182,6 +240,8 @@ const VideoPreviewSlot: React.FC<{ participant: RemoteParticipant; count: number
   return (
     <div style={slotStyle}>
       <video ref={videoRef} autoPlay playsInline muted style={videoStyle} />
+      {/* Per-slot retro overlay in admin preview */}
+      {activeFilter === 'retro' && <RetroPreviewOverlay partyName={partyName} />}
     </div>
   );
 };
@@ -190,7 +250,9 @@ const VideoPreviewSlot: React.FC<{ participant: RemoteParticipant; count: number
 const ProjectorPreview: React.FC<{
   selectedParticipants: RemoteParticipant[];
   qrUrl: string;
-}> = ({ selectedParticipants, qrUrl }) => {
+  activeFilter: FilterId;
+  partyName: string;
+}> = ({ selectedParticipants, qrUrl, activeFilter, partyName }) => {
   const count = selectedParticipants.length;
   return (
     <div className="relative w-full h-full rounded-[1.5rem] overflow-hidden bg-[#080808]">
@@ -218,13 +280,19 @@ const ProjectorPreview: React.FC<{
           <p className="text-white/30 text-[9px] uppercase tracking-[0.3em]">del momento</p>
         </div>
       ) : (
-        /* Raw video grid — no mockups */
+        /* Raw video grid — each slot handles its own filter overlay */
         <div
           className="absolute inset-0"
           style={{ display: 'flex', flexWrap: count === 4 ? 'wrap' : 'nowrap' }}
         >
           {selectedParticipants.map(p => (
-            <VideoPreviewSlot key={p.identity} participant={p} count={count} />
+            <VideoPreviewSlot
+              key={p.identity}
+              participant={p}
+              count={count}
+              activeFilter={activeFilter}
+              partyName={partyName}
+            />
           ))}
         </div>
       )}
@@ -683,7 +751,12 @@ const LiveControl: React.FC = () => {
           <div className={`relative aspect-video rounded-[2rem] overflow-hidden border-2 transition-all duration-700
             ${selectedIdentities.length > 0 ? 'border-orange-500 shadow-[0_0_50px_rgba(249,115,22,0.15)] ring-4 ring-orange-500/20' : 'border-neutral-800'}`}
           >
-            <ProjectorPreview selectedParticipants={selectedParticipants} qrUrl={qrCodeUrl} />
+            <ProjectorPreview
+              selectedParticipants={selectedParticipants}
+              qrUrl={qrCodeUrl}
+              activeFilter={activeFilter}
+              partyName={partyName}
+            />
 
             {/* Preview label */}
             <div className="absolute top-4 right-4 bg-black/60 backdrop-blur-md text-white/50 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-widest border border-white/10 pointer-events-none">
@@ -756,6 +829,7 @@ const LiveControl: React.FC = () => {
 
         /* Rotate portrait stream to fill 16:9 landscape card (guest grid) */
         .card-video { position:absolute; top:50%; left:50%; width:56.25%; height:177.78%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
+        @keyframes lcPulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
         .custom-scrollbar::-webkit-scrollbar { width:4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background:transparent; }
