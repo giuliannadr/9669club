@@ -63,6 +63,114 @@ const WaitingScreen: React.FC = () => (
   </div>
 );
 
+// ── VHS glitch canvas ─────────────────────────────────────────────────────────
+// Randomly fires analog-failure artifacts: displaced bands, bright tape creases,
+// static bursts — zero impact on WebRTC stream quality.
+type GlitchEvent = {
+  bands:     { y: number; h: number; alpha: number; bright: boolean; xOff: number }[];
+  scanLine:  { y: number; h: number; alpha: number } | null;
+  noiseBand: { y: number; h: number } | null;
+};
+
+const GlitchCanvas: React.FC = () => {
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width  = 320;
+    canvas.height = 180;
+
+    let raf: number;
+    let glitchUntil = 0;
+    let nextGlitch   = Date.now() + 1500 + Math.random() * 5000;
+    let current: GlitchEvent | null = null;
+
+    const mkGlitch = (): GlitchEvent => ({
+      bands: Array.from({ length: 1 + Math.floor(Math.random() * 4) }, () => ({
+        y:      Math.random(),
+        h:      0.012 + Math.random() * 0.055,
+        alpha:  0.25  + Math.random() * 0.50,
+        bright: Math.random() > 0.40,
+        xOff:   (Math.random() - 0.5) * 0.15, // horizontal drift fraction
+      })),
+      scanLine: Math.random() > 0.30 ? {
+        y:     Math.random(),
+        h:     0.003 + Math.random() * 0.008,
+        alpha: 0.55  + Math.random() * 0.40,
+      } : null,
+      noiseBand: Math.random() > 0.50 ? {
+        y: Math.random() * 0.8,
+        h: 0.03 + Math.random() * 0.08,
+      } : null,
+    });
+
+    const draw = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const now = Date.now();
+
+      if (now > nextGlitch) {
+        const dur = 55 + Math.random() * 340;
+        glitchUntil = now + dur;
+        // 30% chance of a quick double-hit shortly after
+        nextGlitch = now + dur + (Math.random() > 0.70
+          ? 60 + Math.random() * 180
+          : 1800 + Math.random() * 7000);
+        current = mkGlitch();
+      }
+
+      if (now < glitchUntil && current) {
+        const W = canvas.width, H = canvas.height;
+
+        // Horizontal displaced bands (bright or dark)
+        current.bands.forEach(b => {
+          ctx.fillStyle = b.bright
+            ? `rgba(255,255,255,${b.alpha})`
+            : `rgba(0,0,0,${b.alpha})`;
+          ctx.fillRect(b.xOff * W, b.y * H, W, b.h * H);
+        });
+
+        // Thin bright scan line (tape crease)
+        if (current.scanLine) {
+          const sl = current.scanLine;
+          ctx.fillStyle = `rgba(255,255,255,${sl.alpha})`;
+          ctx.fillRect(0, sl.y * H, W, sl.h * H);
+        }
+
+        // Static noise band
+        if (current.noiseBand) {
+          const nb    = current.noiseBand;
+          const yPx   = Math.floor(nb.y * H);
+          const hPx   = Math.max(1, Math.ceil(nb.h * H));
+          const strip = ctx.createImageData(W, hPx);
+          for (let i = 0; i < strip.data.length; i += 4) {
+            const v = (Math.random() * 255) | 0;
+            strip.data[i] = strip.data[i + 1] = strip.data[i + 2] = v;
+            strip.data[i + 3] = Math.random() > 0.45 ? 190 : 55;
+          }
+          ctx.putImageData(strip, 0, yPx);
+        }
+      }
+
+      raf = requestAnimationFrame(draw);
+    };
+
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <canvas
+      ref={ref}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ zIndex: 12, mixBlendMode: 'overlay', opacity: 0.88 }}
+    />
+  );
+};
+
 // ── Film grain canvas ─────────────────────────────────────────────────────────
 const GrainCanvas: React.FC = () => {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -158,8 +266,11 @@ const RetroCamHUD: React.FC<{
         background: 'radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.72) 100%)',
       }} />
 
-      {/* Grain */}
+      {/* Grain (constant subtle texture) */}
       <GrainCanvas />
+
+      {/* VHS glitch artifacts (random, occasional) */}
+      <GlitchCanvas />
 
       {/* ── Corner brackets ── */}
       {[
