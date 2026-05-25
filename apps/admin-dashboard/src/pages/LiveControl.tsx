@@ -8,7 +8,10 @@ import {
   Activity,
   Camera,
   Copy,
+  Sliders,
 } from 'lucide-react';
+
+type FilterId = 'none' | 'retro';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Room,
@@ -248,10 +251,15 @@ const LiveControl: React.FC = () => {
   const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
   const [latency, setLatency] = useState<number | null>(null);
   const [maxStreams, setMaxStreams] = useState(2); // 1-4
+  const [activeFilter, setActiveFilter] = useState<FilterId>('none');
+  const [partyName, setPartyName] = useState('');
+  const [partyNameInput, setPartyNameInput] = useState('');
 
   const roomRef = useRef<Room | null>(null);
   const selectedIdentitiesRef = useRef<string[]>([]);
   const maxStreamsRef = useRef(2);
+  const activeFilterRef = useRef<FilterId>('none');
+  const partyNameRef = useRef('');
 
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -272,7 +280,23 @@ const LiveControl: React.FC = () => {
     if (!room) return;
     const data = new TextEncoder().encode(JSON.stringify({ type: 'SELECT_STREAMS', identities }));
     room.localParticipant.publishData(data, { reliable: true });
-    await room.localParticipant.setMetadata(JSON.stringify({ selectedIdentities: identities }));
+    await room.localParticipant.setMetadata(JSON.stringify({
+      selectedIdentities: identities,
+      filter: activeFilterRef.current,
+      partyName: partyNameRef.current,
+    }));
+  }, []);
+
+  const broadcastFilter = useCallback(async (filter: FilterId, name: string) => {
+    const room = roomRef.current;
+    if (!room) return;
+    const data = new TextEncoder().encode(JSON.stringify({ type: 'SET_FILTER', filter, partyName: name }));
+    room.localParticipant.publishData(data, { reliable: true });
+    await room.localParticipant.setMetadata(JSON.stringify({
+      selectedIdentities: selectedIdentitiesRef.current,
+      filter,
+      partyName: name,
+    }));
   }, []);
 
   const connectRoom = useCallback(async (id: string) => {
@@ -290,13 +314,19 @@ const LiveControl: React.FC = () => {
 
       room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
         if (SYSTEM_IDENTITIES.has(p.identity)) {
-          if (p.identity === 'stage' && selectedIdentitiesRef.current.length > 0) {
-            const sels = selectedIdentitiesRef.current;
+          if (p.identity === 'stage') {
+            // Rebroadcast current selections and filter to the newly connected stage
             const rebroadcast = () => {
               const r = roomRef.current;
               if (!r) return;
-              const d = new TextEncoder().encode(JSON.stringify({ type: 'SELECT_STREAMS', identities: sels }));
-              r.localParticipant.publishData(d, { reliable: true });
+              if (selectedIdentitiesRef.current.length > 0) {
+                const d = new TextEncoder().encode(JSON.stringify({ type: 'SELECT_STREAMS', identities: selectedIdentitiesRef.current }));
+                r.localParticipant.publishData(d, { reliable: true });
+              }
+              if (activeFilterRef.current !== 'none') {
+                const d2 = new TextEncoder().encode(JSON.stringify({ type: 'SET_FILTER', filter: activeFilterRef.current, partyName: partyNameRef.current }));
+                r.localParticipant.publishData(d2, { reliable: true });
+              }
             };
             setTimeout(rebroadcast, 1000);
             setTimeout(rebroadcast, 2500);
@@ -383,6 +413,23 @@ const LiveControl: React.FC = () => {
       setSelectedIdentities(trimmed);
       broadcastSelections(trimmed).catch(() => {});
     }
+  };
+
+  const handleSetFilter = (filter: FilterId) => {
+    const name = filter === 'none' ? '' : (partyNameInput.trim() || partyName || 'EVENT');
+    activeFilterRef.current = filter;
+    partyNameRef.current = name;
+    setActiveFilter(filter);
+    setPartyName(name);
+    broadcastFilter(filter, name).catch(() => {});
+  };
+
+  const handleApplyPartyName = () => {
+    const name = partyNameInput.trim() || 'EVENT';
+    partyNameRef.current = name;
+    setPartyName(name);
+    setPartyNameInput(name);
+    broadcastFilter(activeFilter, name).catch(() => {});
   };
 
   const handleRemoveStream = (identity: string) => {
@@ -551,6 +598,65 @@ const LiveControl: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Filter / Effects panel */}
+          <div className="bg-neutral-900/50 backdrop-blur-xl border border-neutral-800 p-6 rounded-3xl space-y-4">
+            <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-2">
+              <Sliders className="w-4 h-4" /> Efecto Visual
+            </h3>
+
+            {/* Filter selector */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: 'none' as FilterId,  label: 'Sin filtro', emoji: '◯', desc: 'Video natural' },
+                { id: 'retro' as FilterId, label: 'Retro B&W',  emoji: '🎞', desc: 'Cámara clásica' },
+              ].map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => handleSetFilter(f.id)}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border transition-all text-center
+                    ${activeFilter === f.id
+                      ? 'border-orange-500 bg-orange-500/10 text-white shadow-[0_0_12px_rgba(249,115,22,0.2)]'
+                      : 'border-neutral-800 bg-neutral-900/40 text-neutral-500 hover:border-neutral-600 hover:text-neutral-300'}`}
+                >
+                  <span className="text-xl">{f.emoji}</span>
+                  <span className="text-[11px] font-black uppercase tracking-wider">{f.label}</span>
+                  <span className="text-[9px] opacity-60">{f.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Party name input — shown when retro is active */}
+            {activeFilter === 'retro' && (
+              <div className="space-y-2 pt-1">
+                <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest block">
+                  Nombre del evento
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={partyNameInput}
+                    onChange={e => setPartyNameInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleApplyPartyName(); }}
+                    maxLength={20}
+                    placeholder={partyName || 'ej: DESORDEN'}
+                    className="flex-1 bg-neutral-950 border border-neutral-700 text-white font-bold uppercase text-xs px-3 py-2 rounded-xl focus:outline-none focus:border-orange-500 tracking-wider placeholder:text-neutral-600 placeholder:normal-case"
+                  />
+                  <button
+                    onClick={handleApplyPartyName}
+                    className="px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-black rounded-xl transition-all"
+                  >
+                    OK
+                  </button>
+                </div>
+                {partyName && (
+                  <p className="text-[10px] text-orange-400/70 font-bold">
+                    HUD: {partyName.toUpperCase()} CAM
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-orange-500/5 border border-orange-500/10 p-6 rounded-3xl space-y-4">
