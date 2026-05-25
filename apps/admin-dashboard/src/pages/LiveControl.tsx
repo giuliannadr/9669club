@@ -139,8 +139,9 @@ const GuestVideoCard: React.FC<{
   );
 };
 
-// ── Tablet preview unit (landscape 4:3, for projector preview inside admin) ──
-const TabletPreviewUnit: React.FC<{ participant: RemoteParticipant; count: number }> = ({ participant, count }) => {
+// ── Video preview slot (raw video, rotated, inside the admin projector preview) ──
+// Container is 16:9. Rotation math: slot (W/count × H) → video css w=H/slotW×100%, h=slotW/H×100%
+const VideoPreviewSlot: React.FC<{ participant: RemoteParticipant; count: number }> = ({ participant, count }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -157,88 +158,85 @@ const TabletPreviewUnit: React.FC<{ participant: RemoteParticipant; count: numbe
     };
   }, [participant]);
 
-  const h = count === 1 ? '68%' : '56%';
+  // 16:9 container: slotRatio = slotW/slotH
+  // Row layout (1,2,3): slotRatio = (16/count)/9
+  // 2×2 grid (4):      slotRatio = (16/2)/(9/2) = 16/9 (same as count=1)
+  const countForRatio = count <= 3 ? count : 1;
+  const slotRatio = 16 / (9 * countForRatio);
+  const videoStyle: React.CSSProperties = {
+    position: 'absolute', top: '50%', left: '50%',
+    width: `${100 / slotRatio}%`,
+    height: `${100 * slotRatio}%`,
+    transform: 'translate(-50%, -50%) rotate(90deg)',
+    objectFit: 'cover',
+  };
+
+  const slotStyle: React.CSSProperties =
+    count === 4
+      ? { width: '50%', height: '50%', position: 'relative', overflow: 'hidden', flexShrink: 0 }
+      : { flex: 1, height: '100%', position: 'relative', overflow: 'hidden' };
 
   return (
-    <div className="pp-tablet" style={{ height: h }}>
-      {/* Top-edge buttons */}
-      <div className="pp-tbtn-h" style={{ top: '-3px', left: '8%',  width: '14px' }} />
-      <div className="pp-tbtn-h" style={{ top: '-3px', left: '13%', width: '14px' }} />
-      <div className="pp-tbtn-h" style={{ top: '-3px', right: '8%', width: '20px' }} />
-      {/* Camera dot — right bezel */}
-      <div className="pp-tcam" />
-      <div className="pp-tscreen">
-        <video ref={videoRef} autoPlay playsInline muted className="tab-video" />
-        <div className="absolute top-2 inset-x-0 flex justify-center z-10 pointer-events-none">
-          <div className="bg-rose-600/90 text-white px-1.5 py-0.5 rounded-full text-[7px] font-black flex items-center gap-1">
-            <div className="w-1 h-1 bg-white rounded-full animate-pulse" /> EN VIVO
-          </div>
-        </div>
-      </div>
+    <div style={slotStyle}>
+      <video ref={videoRef} autoPlay playsInline muted style={videoStyle} />
     </div>
   );
 };
 
-// ── Projector preview (replaces master video) ─────────────────────────────────
+// ── Projector preview ─────────────────────────────────────────────────────────
 const ProjectorPreview: React.FC<{
   selectedParticipants: RemoteParticipant[];
   qrUrl: string;
-}> = ({ selectedParticipants, qrUrl }) => (
-  <div className="relative w-full h-full rounded-[1.5rem] overflow-hidden bg-[#080808]">
-    {/* Blobs */}
-    <div className="absolute inset-0 overflow-hidden">
-      <div className="pv-blob pv-b1" />
-      <div className="pv-blob pv-b2" />
-      <div className="pv-blob pv-b3" />
-    </div>
+}> = ({ selectedParticipants, qrUrl }) => {
+  const count = selectedParticipants.length;
+  return (
+    <div className="relative w-full h-full rounded-[1.5rem] overflow-hidden bg-[#080808]">
+      {/* Blobs — always shown */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="pv-blob pv-b1" />
+        <div className="pv-blob pv-b2" />
+        <div className="pv-blob pv-b3" />
+      </div>
 
-    {selectedParticipants.length === 0 ? (
-      /* Waiting state */
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
-        {qrUrl && (
-          <div className="relative">
-            <div className="absolute -inset-2 rounded-2xl bg-orange-500/20 blur-lg animate-pulse" />
-            <div className="relative bg-white p-3 rounded-2xl shadow-xl">
-              <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
+      {count === 0 ? (
+        /* Waiting state — shows QR since this is admin-only */
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center z-10">
+          {qrUrl && (
+            <div className="relative">
+              <div className="absolute -inset-2 rounded-2xl bg-orange-500/20 blur-lg animate-pulse" />
+              <div className="relative bg-white p-3 rounded-2xl shadow-xl">
+                <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
+              </div>
             </div>
-          </div>
-        )}
-        <p className="text-white font-black text-base tracking-tight leading-tight">
-          ESCANEÁ<br /><span className="text-orange-500">&amp; SÉ PARTE</span>
-        </p>
-        <p className="text-white/30 text-[9px] uppercase tracking-[0.3em]">del momento</p>
-      </div>
-    ) : (
-      /* Tablet mockups */
-      <div className="absolute inset-0 flex items-center justify-center gap-3">
-        {selectedParticipants.map(p => (
-          <TabletPreviewUnit key={p.identity} participant={p} count={selectedParticipants.length} />
-        ))}
-      </div>
-    )}
+          )}
+          <p className="text-white font-black text-base tracking-tight leading-tight">
+            ESCANEÁ<br /><span className="text-orange-500">&amp; SÉ PARTE</span>
+          </p>
+          <p className="text-white/30 text-[9px] uppercase tracking-[0.3em]">del momento</p>
+        </div>
+      ) : (
+        /* Raw video grid — no mockups */
+        <div
+          className="absolute inset-0"
+          style={{ display: 'flex', flexWrap: count === 4 ? 'wrap' : 'nowrap' }}
+        >
+          {selectedParticipants.map(p => (
+            <VideoPreviewSlot key={p.identity} participant={p} count={count} />
+          ))}
+        </div>
+      )}
 
-    {/* Overlays when streaming */}
-    {selectedParticipants.length > 0 && (
-      <>
+      {/* ON AIR badge */}
+      {count > 0 && (
         <div className="absolute top-3 left-3 z-20">
           <div className="bg-rose-600 text-white px-2 py-0.5 rounded text-[9px] font-black flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" /> ON AIR
           </div>
         </div>
-        {qrUrl && (
-          <div className="absolute bottom-3 right-3 z-20">
-            <div className="bg-white p-1.5 rounded-lg shadow-lg">
-              <img src={qrUrl} alt="QR" className="w-12 h-12 block" />
-            </div>
-          </div>
-        )}
-        <div className="absolute bottom-3 left-3 opacity-20 z-20">
-          <p className="text-white font-black tracking-widest text-[10px]">9669<span className="text-orange-500">.STUDIO</span></p>
-        </div>
-      </>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 // ── Main LiveControl ──────────────────────────────────────────────────────────
 const LiveControl: React.FC = () => {
@@ -249,9 +247,11 @@ const LiveControl: React.FC = () => {
   const [localIp, setLocalIp] = useState('192.168.1.42');
   const [participants, setParticipants] = useState<RemoteParticipant[]>([]);
   const [latency, setLatency] = useState<number | null>(null);
+  const [maxStreams, setMaxStreams] = useState(2); // 1-4
 
   const roomRef = useRef<Room | null>(null);
   const selectedIdentitiesRef = useRef<string[]>([]);
+  const maxStreamsRef = useRef(2);
 
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -357,20 +357,32 @@ const LiveControl: React.FC = () => {
   };
 
   const handleProjectStream = async (identity: string) => {
-    // Always read from ref to avoid stale-closure issues with React state
     const current = selectedIdentitiesRef.current;
+    const max = maxStreamsRef.current;
     const isAlreadySelected = current.includes(identity);
     let next: string[];
     if (isAlreadySelected) {
       next = current.filter(id => id !== identity);
-    } else if (current.length < 2) {
+    } else if (current.length < max) {
       next = [...current, identity];
     } else {
-      return; // already 2 selected
+      return; // already at max
     }
     selectedIdentitiesRef.current = next;
     setSelectedIdentities(next);
     try { await broadcastSelections(next); } catch { /* ignore if no room */ }
+  };
+
+  const handleSetMaxStreams = (n: number) => {
+    maxStreamsRef.current = n;
+    setMaxStreams(n);
+    // If currently selected more than new max, trim and rebroadcast
+    if (selectedIdentitiesRef.current.length > n) {
+      const trimmed = selectedIdentitiesRef.current.slice(0, n);
+      selectedIdentitiesRef.current = trimmed;
+      setSelectedIdentities(trimmed);
+      broadcastSelections(trimmed).catch(() => {});
+    }
   };
 
   const handleRemoveStream = (identity: string) => {
@@ -510,7 +522,25 @@ const LiveControl: React.FC = () => {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-neutral-500">En proyector</span>
-                <span className="text-xs font-bold text-orange-400">{selectedIdentities.length}/2</span>
+                <span className="text-xs font-bold text-orange-400">{selectedIdentities.length}/{maxStreams}</span>
+              </div>
+              {/* Max streams selector */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-500">Máx. pantallas</span>
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => handleSetMaxStreams(n)}
+                      className={`w-6 h-6 rounded-md text-[11px] font-black transition-all
+                        ${maxStreams === n
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700 hover:text-white'}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
               </div>
               {isRoomOpen && roomId && (
                 <div className="flex items-center justify-between">
@@ -563,8 +593,8 @@ const LiveControl: React.FC = () => {
                 <span className="text-[10px] bg-neutral-800 text-neutral-500 px-2 py-0.5 rounded-full">{participants.length}</span>
               </h3>
               <div className="flex items-center gap-2 text-[11px] text-neutral-500">
-                <div className={`w-2 h-2 rounded-full ${selectedIdentities.length >= 2 ? 'bg-orange-500' : 'bg-neutral-700'}`} />
-                {selectedIdentities.length}/2 en proyector
+                <div className={`w-2 h-2 rounded-full ${selectedIdentities.length >= maxStreams ? 'bg-orange-500' : 'bg-neutral-700'}`} />
+                {selectedIdentities.length}/{maxStreams} en proyector
               </div>
             </div>
 
@@ -590,7 +620,7 @@ const LiveControl: React.FC = () => {
                     selectionIndex={selectedIdentities.includes(participant.identity)
                       ? selectedIdentities.indexOf(participant.identity)
                       : null}
-                    disabled={selectedIdentities.length >= 2 && !selectedIdentities.includes(participant.identity)}
+                    disabled={selectedIdentities.length >= maxStreams && !selectedIdentities.includes(participant.identity)}
                     onSelect={() => handleProjectStream(participant.identity)}
                     onRemove={() => handleRemoveStream(participant.identity)}
                   />
@@ -618,16 +648,7 @@ const LiveControl: React.FC = () => {
         @keyframes pvb2 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(-10%,8%) scale(1.08)} 100%{transform:translate(6%,-10%) scale(0.96)} }
         @keyframes pvb3 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(12%,-6%) scale(1.12)} 100%{transform:translate(-8%,5%) scale(0.9)} }
 
-        /* ── Tablet preview unit (landscape 4:3) ── */
-        .pp-tablet { position:relative; aspect-ratio:4/3; background:linear-gradient(160deg,#3a3a3c 0%,#1c1c1e 40%,#2c2c2e 100%); border-radius:14px; padding:5px; box-shadow:0 0 0 1px rgba(255,255,255,0.12),0 0 0 2px rgba(0,0,0,0.8),0 16px 50px rgba(0,0,0,0.9),0 0 28px rgba(249,115,22,0.1),inset 0 1px 0 rgba(255,255,255,0.18); animation:ppfloat 6s ease-in-out infinite; }
-        @keyframes ppfloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
-        .pp-tbtn-h { position:absolute; height:3px; background:linear-gradient(90deg,#3a3a3c,#2c2c2e); border-radius:2px; }
-        .pp-tcam { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:6px; height:6px; border-radius:50%; background:radial-gradient(circle at 35% 35%,#1a3a5c,#0a0a14); box-shadow:0 0 0 1px rgba(255,255,255,0.04); z-index:20; }
-        .pp-tscreen { width:100%; height:100%; background:#000; border-radius:10px; overflow:hidden; position:relative; }
-        /* Rotate portrait stream to fill 4:3 landscape tablet frame */
-        .tab-video { position:absolute; top:50%; left:50%; width:75%; height:133.34%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
         /* Rotate portrait stream to fill 16:9 landscape card (guest grid) */
-        /* H = W*9/16 → css-width=56.25%, css-height=177.78% */
         .card-video { position:absolute; top:50%; left:50%; width:56.25%; height:177.78%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
 
         .custom-scrollbar::-webkit-scrollbar { width:4px; }

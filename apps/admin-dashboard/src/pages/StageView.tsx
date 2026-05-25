@@ -16,16 +16,13 @@ const readSelectedIdentities = (participant: RemoteParticipant | undefined): str
   try {
     const meta = JSON.parse(participant.metadata);
     if (Array.isArray(meta.selectedIdentities)) return meta.selectedIdentities;
-    if (typeof meta.selectedIdentity === 'string' && meta.selectedIdentity) {
+    if (typeof meta.selectedIdentity === 'string' && meta.selectedIdentity)
       return [meta.selectedIdentity];
-    }
     return [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 };
 
-// ── Animated background blobs (always on) ───────────────────────────────────
+// ── Animated background blobs ────────────────────────────────────────────────
 const AnimatedBg: React.FC = () => (
   <div className="absolute inset-0 overflow-hidden bg-[#080808]">
     <div className="blob blob-1" />
@@ -43,139 +40,88 @@ const AnimatedBg: React.FC = () => (
   </div>
 );
 
-// ── QR corner ───────────────────────────────────────────────────────────────
-const QRCorner: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, guestUrl }) => (
-  <div className="absolute bottom-8 right-8 pointer-events-none flex flex-col items-center gap-2 z-20">
-    <div className="bg-white p-2 rounded-xl shadow-2xl">
-      <img src={qrUrl} alt="QR" className="w-24 h-24 block" />
+// ── Waiting screen (no QR — shown only in admin) ─────────────────────────────
+const WaitingScreen: React.FC = () => (
+  <div className="absolute inset-0 flex flex-col items-center justify-center select-none z-10">
+    <div className="flex flex-col items-center gap-8 text-center">
+      <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
+        9669<span className="text-orange-500/30">.STUDIO</span>
+      </p>
+      <div className="flex items-center gap-3 text-white/20 text-sm font-bold uppercase tracking-[0.4em]">
+        <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
+        En espera de señal
+        <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
+      </div>
     </div>
-    <p className="text-white/30 text-[9px] font-bold uppercase tracking-[0.15em] text-center">
-      {guestUrl.replace(/^https?:\/\//, '')}
-    </p>
   </div>
 );
 
-// ── Tablet mockup with live video (landscape 4:3) ────────────────────────────
-const TabletMockup: React.FC<{ participant: RemoteParticipant; heightVh: number; count: number }> = ({
-  participant,
-  heightVh,
-  count,
-}) => {
+// ── Single video slot (raw video, no mockup) ─────────────────────────────────
+// Rotates portrait WebRTC stream so landscape filming fills the slot correctly.
+const VideoSlot: React.FC<{
+  participant: RemoteParticipant;
+  count: number;
+}> = ({ participant, count }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     const attach = () => {
       const pub = participant.getTrackPublication(Track.Source.Camera);
-      if (pub?.videoTrack && videoRef.current) {
-        pub.videoTrack.attach(videoRef.current);
-      }
+      if (pub?.videoTrack && videoRef.current) pub.videoTrack.attach(videoRef.current);
     };
     attach();
-
-    const onTrackSubscribed = (track: RemoteTrack) => {
-      if (track.kind === Track.Kind.Video && videoRef.current) {
-        track.attach(videoRef.current);
-      }
+    const onTrack = (track: RemoteTrack) => {
+      if (track.kind === Track.Kind.Video && videoRef.current) track.attach(videoRef.current);
     };
-    participant.on(ParticipantEvent.TrackSubscribed, onTrackSubscribed);
-
+    participant.on(ParticipantEvent.TrackSubscribed, onTrack);
     return () => {
-      participant.off(ParticipantEvent.TrackSubscribed, onTrackSubscribed);
+      participant.off(ParticipantEvent.TrackSubscribed, onTrack);
       const pub = participant.getTrackPublication(Track.Source.Camera);
-      if (pub?.videoTrack && videoRef.current) {
-        pub.videoTrack.detach(videoRef.current);
-      }
+      if (pub?.videoTrack && videoRef.current) pub.videoTrack.detach(videoRef.current);
     };
   }, [participant]);
 
+  // Slot container style — fills its portion of the screen
+  const slotStyle: React.CSSProperties =
+    count === 4
+      ? { width: '50vw', height: '50vh', position: 'relative', overflow: 'hidden', flexShrink: 0 }
+      : { flex: 1, height: '100vh', position: 'relative', overflow: 'hidden' };
+
+  // Video is rotated 90°: visual-width = css-height, visual-height = css-width.
+  // We want the video to fill the slot after rotation, so we swap the dimensions:
+  //   css-width  = slot height   (becomes visual height)
+  //   css-height = slot width    (becomes visual width)
+  let videoStyle: React.CSSProperties;
+  if (count === 1) {
+    videoStyle = { width: '100vh', height: '100vw' };
+  } else if (count === 2) {
+    videoStyle = { width: '100vh', height: '50vw' };
+  } else if (count === 3) {
+    videoStyle = { width: '100vh', height: 'calc(100vw / 3)' };
+  } else {
+    // 4 videos — 2×2 grid, each slot 50vw × 50vh
+    videoStyle = { width: '50vh', height: '50vw' };
+  }
+
   return (
-    <div
-      className="tablet-outer"
-      style={{
-        height: `${heightVh}vh`,
-        maxWidth: count === 2 ? '38vw' : '70vw',
-      }}
-    >
-      {/* Volume buttons — top edge, left area */}
-      <div className="tablet-btn-h" style={{ top: '-5px', left: '8%',  width: '22px' }} />
-      <div className="tablet-btn-h" style={{ top: '-5px', left: '14%', width: '22px' }} />
-      {/* Power button — top edge, right area */}
-      <div className="tablet-btn-h" style={{ top: '-5px', right: '8%', width: '32px' }} />
-      {/* Camera — right bezel, centered */}
-      <div className="tablet-cam" />
-
-      {/* Screen */}
-      <div className="tablet-screen">
-        {/* Rotate portrait stream 90° so landscape filming fills the 4:3 frame */}
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="tab-video"
-        />
-
-        {/* ON AIR badge */}
-        <div className="absolute top-3 left-0 right-0 flex justify-center z-10 pointer-events-none">
-          <div className="bg-rose-600/90 backdrop-blur text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 shadow-lg">
-            <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-            EN VIVO
-          </div>
-        </div>
-      </div>
+    <div style={slotStyle}>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%) rotate(90deg)',
+          objectFit: 'cover',
+          ...videoStyle,
+        }}
+      />
     </div>
   );
 };
-
-// ── Waiting screen ───────────────────────────────────────────────────────────
-const WaitingScreen: React.FC<{ qrUrl: string; guestUrl: string }> = ({ qrUrl, guestUrl }) => (
-  <div className="absolute inset-0 flex flex-col items-center justify-center select-none z-10">
-    <div className="absolute top-10 left-1/2 -translate-x-1/2">
-      <p className="text-white/20 font-black tracking-[0.5em] text-sm uppercase">
-        9669<span className="text-orange-500/40">.STUDIO</span>
-      </p>
-    </div>
-
-    <div className="flex flex-col items-center gap-10 text-center">
-      <div className="relative">
-        <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-orange-500/30 to-rose-500/20 blur-2xl animate-pulse" />
-        <div className="relative bg-white p-5 rounded-[1.5rem] shadow-[0_0_80px_rgba(249,115,22,0.25)]">
-          <img src={qrUrl} alt="QR Code" className="w-64 h-64 block" />
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <p className="text-white font-black text-4xl tracking-tight leading-tight">
-          ESCANEÁ<br />
-          <span className="text-orange-500">&amp; SÉ PARTE</span>
-        </p>
-        <p className="text-white/40 text-base tracking-[0.3em] uppercase font-bold">
-          del momento
-        </p>
-      </div>
-
-      <div className="flex items-center gap-3 text-white/25 text-xs font-bold uppercase tracking-[0.3em]">
-        <div className="w-8 h-px bg-white/20" />
-        abrí la cámara y transmití en vivo
-        <div className="w-8 h-px bg-white/20" />
-      </div>
-
-      <p className="text-white/15 text-sm font-mono tracking-wider">
-        {guestUrl.replace(/^https?:\/\//, '')}
-      </p>
-    </div>
-
-    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2">
-      <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-      <p className="text-white/20 text-xs font-bold uppercase tracking-widest">
-        En espera de señal
-      </p>
-    </div>
-  </div>
-);
-
-// Height (vh) for each tablet by stream count
-const TABLET_HEIGHTS: Record<number, number> = { 1: 52, 2: 44 };
 
 // ── Main StageView ───────────────────────────────────────────────────────────
 const StageView: React.FC = () => {
@@ -183,19 +129,10 @@ const StageView: React.FC = () => {
   const [participants, setParticipants] = useState<Map<string, RemoteParticipant>>(new Map());
   const [selectedIdentities, setSelectedIdentities] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
-
   const roomRef = useRef<Room | null>(null);
 
-  const guestUrl = roomId ? `${window.location.origin}/live/${roomId}` : '';
-  const qrUrl = guestUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(guestUrl)}&color=0-0-0&bgcolor=FFFFFF`
-    : '';
-
   useEffect(() => {
-    if (!roomId || !LIVEKIT_URL) {
-      setError('Sala no encontrada o LiveKit no configurado.');
-      return;
-    }
+    if (!roomId || !LIVEKIT_URL) { setError('Sala no encontrada.'); return; }
 
     const connect = async () => {
       try {
@@ -213,9 +150,8 @@ const StageView: React.FC = () => {
         room.on(RoomEvent.Disconnected, () => setSelectedIdentities([]));
 
         room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
-          if (p.identity !== 'admin' && p.identity !== 'stage') {
+          if (p.identity !== 'admin' && p.identity !== 'stage')
             setParticipants(prev => new Map(prev).set(p.identity, p));
-          }
         });
 
         room.on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
@@ -224,49 +160,43 @@ const StageView: React.FC = () => {
         });
 
         room.on(RoomEvent.TrackSubscribed, (_t, _p, participant: RemoteParticipant) => {
-          if (participant.identity !== 'admin' && participant.identity !== 'stage') {
+          if (participant.identity !== 'admin' && participant.identity !== 'stage')
             setParticipants(prev => new Map(prev).set(participant.identity, participant));
-          }
         });
 
         room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
           try {
             const msg = JSON.parse(new TextDecoder().decode(payload));
-            if (msg.type === 'SELECT_STREAMS' && Array.isArray(msg.identities)) {
-              setSelectedIdentities(msg.identities.slice(0, 2));
-            }
-            if (msg.type === 'SELECT_STREAM' && typeof msg.participantIdentity === 'string') {
+            if (msg.type === 'SELECT_STREAMS' && Array.isArray(msg.identities))
+              setSelectedIdentities(msg.identities.slice(0, 4));
+            if (msg.type === 'SELECT_STREAM' && typeof msg.participantIdentity === 'string')
               setSelectedIdentities(msg.participantIdentity ? [msg.participantIdentity] : []);
-            }
           } catch { /* ignore */ }
         });
 
         room.on(RoomEvent.ParticipantMetadataChanged, (_m, participant) => {
           if (participant.identity === 'admin') {
             const ids = readSelectedIdentities(participant as RemoteParticipant);
-            if (ids.length > 0) setSelectedIdentities(ids.slice(0, 2));
+            if (ids.length > 0) setSelectedIdentities(ids.slice(0, 4));
           }
         });
 
         await room.connect(LIVEKIT_URL, token);
 
         setParticipants(new Map(
-          Array.from(room.remoteParticipants.entries()).filter(
-            ([id]) => id !== 'admin' && id !== 'stage'
-          )
+          Array.from(room.remoteParticipants.entries())
+            .filter(([id]) => id !== 'admin' && id !== 'stage')
         ));
 
         const tryReadAdmin = () => {
-          const adminP = roomRef.current?.remoteParticipants.get('admin');
-          const ids = readSelectedIdentities(adminP);
-          if (ids.length > 0) setSelectedIdentities(ids.slice(0, 2));
+          const ids = readSelectedIdentities(roomRef.current?.remoteParticipants.get('admin'));
+          if (ids.length > 0) setSelectedIdentities(ids.slice(0, 4));
         };
         tryReadAdmin();
         setTimeout(tryReadAdmin, 800);
         setTimeout(tryReadAdmin, 2000);
-
       } catch (err) {
-        setError('No se pudo conectar a la sala.');
+        setError('No se pudo conectar.');
         console.error(err);
       }
     };
@@ -280,7 +210,6 @@ const StageView: React.FC = () => {
     .filter((p): p is RemoteParticipant => !!p);
 
   const count = selectedParticipants.length;
-  const tabletHeight = TABLET_HEIGHTS[count] ?? 62;
 
   if (error) {
     return (
@@ -291,161 +220,33 @@ const StageView: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 overflow-hidden">
-      <AnimatedBg />
+    <div className="fixed inset-0 overflow-hidden bg-black">
+      {/* Animated bg — always visible (shows through when no streams) */}
+      {count === 0 && <AnimatedBg />}
 
-      <div className="absolute inset-0 flex items-center justify-center z-10">
-        {count > 0 ? (
-          <div
-            className="flex items-center justify-center"
-            style={{ gap: count === 2 ? '32px' : '0' }}
-          >
-            {selectedParticipants.map(p => (
-              <TabletMockup
-                key={p.identity}
-                participant={p}
-                heightVh={tabletHeight}
-                count={count}
-              />
-            ))}
-          </div>
-        ) : (
-          <WaitingScreen qrUrl={qrUrl} guestUrl={guestUrl} />
-        )}
-      </div>
+      {count === 0 && <WaitingScreen />}
 
+      {/* Video grid — no mockups, fills the screen */}
       {count > 0 && (
-        <>
-          <div className="absolute bottom-8 left-10 opacity-20 pointer-events-none z-20">
-            <p className="text-white font-black tracking-[0.3em] text-xl">
-              9669<span className="text-orange-500">.STUDIO</span>
-            </p>
-          </div>
-          {qrUrl && <QRCorner qrUrl={qrUrl} guestUrl={guestUrl} />}
-        </>
+        <div
+          className={count === 4 ? 'fixed inset-0 flex flex-wrap' : 'fixed inset-0 flex'}
+        >
+          {selectedParticipants.map(p => (
+            <VideoSlot key={p.identity} participant={p} count={count} />
+          ))}
+        </div>
       )}
 
       <style>{`
-        /* ── Animated blobs ── */
-        .blob {
-          position: absolute;
-          border-radius: 50%;
-          filter: blur(100px);
-          opacity: 0.18;
-          will-change: transform;
-        }
-        .blob-1 {
-          width: 700px; height: 700px;
-          background: radial-gradient(circle, #f97316, transparent 70%);
-          top: -10%; left: -10%;
-          animation: blob1 18s ease-in-out infinite alternate;
-        }
-        .blob-2 {
-          width: 600px; height: 600px;
-          background: radial-gradient(circle, #e11d48, transparent 70%);
-          bottom: -15%; right: -10%;
-          animation: blob2 22s ease-in-out infinite alternate;
-        }
-        .blob-3 {
-          width: 500px; height: 500px;
-          background: radial-gradient(circle, #ea580c, transparent 70%);
-          top: 40%; left: 35%;
-          animation: blob3 26s ease-in-out infinite alternate;
-          opacity: 0.10;
-        }
-        .blob-4 {
-          width: 400px; height: 400px;
-          background: radial-gradient(circle, #fb923c, transparent 70%);
-          top: 10%; right: 20%;
-          animation: blob4 20s ease-in-out infinite alternate;
-          opacity: 0.08;
-        }
-        @keyframes blob1 {
-          0%   { transform: translate(0px, 0px) scale(1); }
-          33%  { transform: translate(80px, -60px) scale(1.08); }
-          66%  { transform: translate(-50px, 90px) scale(0.94); }
-          100% { transform: translate(60px, 40px) scale(1.04); }
-        }
-        @keyframes blob2 {
-          0%   { transform: translate(0px, 0px) scale(1); }
-          33%  { transform: translate(-90px, 70px) scale(1.06); }
-          66%  { transform: translate(60px, -80px) scale(0.96); }
-          100% { transform: translate(-40px, -30px) scale(1.02); }
-        }
-        @keyframes blob3 {
-          0%   { transform: translate(0px, 0px) scale(1); }
-          50%  { transform: translate(100px, -70px) scale(1.12); }
-          100% { transform: translate(-80px, 50px) scale(0.9); }
-        }
-        @keyframes blob4 {
-          0%   { transform: translate(0px, 0px) scale(1); }
-          50%  { transform: translate(-60px, 100px) scale(1.08); }
-          100% { transform: translate(70px, -50px) scale(0.95); }
-        }
-
-        /* ── Tablet mockup (landscape 4:3) ── */
-        .tablet-outer {
-          position: relative;
-          aspect-ratio: 4 / 3;
-          background: linear-gradient(160deg, #3a3a3c 0%, #1c1c1e 40%, #2c2c2e 100%);
-          border-radius: 20px;
-          padding: 10px;
-          box-shadow:
-            0 0 0 1px rgba(255,255,255,0.12),
-            0 0 0 2px rgba(0,0,0,0.8),
-            0 30px 90px rgba(0,0,0,0.9),
-            0 0 60px rgba(249,115,22,0.1),
-            inset 0 1px 0 rgba(255,255,255,0.18),
-            inset 0 -1px 0 rgba(0,0,0,0.5);
-          animation: tablet-float 6s ease-in-out infinite;
-        }
-        @keyframes tablet-float {
-          0%, 100% { transform: translateY(0px); }
-          50%       { transform: translateY(-8px); }
-        }
-        /* Horizontal buttons (top edge) */
-        .tablet-btn-h {
-          position: absolute;
-          height: 4px;
-          background: linear-gradient(90deg, #3a3a3c, #2c2c2e);
-          border-radius: 3px;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-        }
-        /* Camera dot — right bezel, centered vertically */
-        .tablet-cam {
-          position: absolute;
-          right: 5px;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 9px;
-          height: 9px;
-          border-radius: 50%;
-          background: radial-gradient(circle at 35% 35%, #1a3a5c, #0a0a14);
-          box-shadow: 0 0 0 2px #0d0d1a, inset 0 0 0 2px rgba(255,255,255,0.04);
-          z-index: 20;
-        }
-        .tablet-screen {
-          width: 100%;
-          height: 100%;
-          background: #000;
-          border-radius: 12px;
-          overflow: hidden;
-          position: relative;
-        }
-        /* Rotate portrait stream to fill landscape 4:3 frame without cropping */
-        .tab-video {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          /* After 90° rotation: visual-width = CSS height, visual-height = CSS width */
-          /* 4:3 container → H = W*3/4                                               */
-          /* We want visual-width = W  → CSS height = W   → height: 133.33%          */
-          /* We want visual-height = H → CSS width  = H   → width:  75%              */
-          width: 75%;
-          height: 133.34%;
-          transform: translate(-50%, -50%) rotate(90deg);
-          object-fit: cover;
-        }
+        .blob { position:absolute; border-radius:50%; filter:blur(100px); opacity:0.18; will-change:transform; }
+        .blob-1 { width:700px; height:700px; background:radial-gradient(circle,#f97316,transparent 70%); top:-10%; left:-10%; animation:blob1 18s ease-in-out infinite alternate; }
+        .blob-2 { width:600px; height:600px; background:radial-gradient(circle,#e11d48,transparent 70%); bottom:-15%; right:-10%; animation:blob2 22s ease-in-out infinite alternate; }
+        .blob-3 { width:500px; height:500px; background:radial-gradient(circle,#ea580c,transparent 70%); top:40%; left:35%; animation:blob3 26s ease-in-out infinite alternate; opacity:0.10; }
+        .blob-4 { width:400px; height:400px; background:radial-gradient(circle,#fb923c,transparent 70%); top:10%; right:20%; animation:blob4 20s ease-in-out infinite alternate; opacity:0.08; }
+        @keyframes blob1 { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(80px,-60px) scale(1.08)} 66%{transform:translate(-50px,90px) scale(0.94)} 100%{transform:translate(60px,40px) scale(1.04)} }
+        @keyframes blob2 { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(-90px,70px) scale(1.06)} 66%{transform:translate(60px,-80px) scale(0.96)} 100%{transform:translate(-40px,-30px) scale(1.02)} }
+        @keyframes blob3 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(100px,-70px) scale(1.12)} 100%{transform:translate(-80px,50px) scale(0.9)} }
+        @keyframes blob4 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(-60px,100px) scale(1.08)} 100%{transform:translate(70px,-50px) scale(0.95)} }
       `}</style>
     </div>
   );
