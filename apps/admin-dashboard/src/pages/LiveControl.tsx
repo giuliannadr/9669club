@@ -454,6 +454,14 @@ const LiveControl: React.FC = () => {
     }
   };
 
+  const broadcastOnScreen = useCallback((identity: string, onScreen: boolean) => {
+    const room = roomRef.current;
+    if (!room) return;
+    const type = onScreen ? 'ON_SCREEN' : 'OFF_SCREEN';
+    const data = new TextEncoder().encode(JSON.stringify({ type, identity }));
+    room.localParticipant.publishData(data, { reliable: true });
+  }, []);
+
   const handleProjectStream = async (identity: string) => {
     const current = selectedIdentitiesRef.current;
     const max = maxStreamsRef.current;
@@ -468,6 +476,8 @@ const LiveControl: React.FC = () => {
     }
     selectedIdentitiesRef.current = next;
     setSelectedIdentities(next);
+    // Notify the guest whether they're now on screen or not
+    broadcastOnScreen(identity, !isAlreadySelected);
     try { await broadcastSelections(next); } catch { /* ignore if no room */ }
   };
 
@@ -501,6 +511,10 @@ const LiveControl: React.FC = () => {
   };
 
   const handleRemoveStream = (identity: string) => {
+    // If they were on screen, notify them they're no longer projected
+    if (selectedIdentitiesRef.current.includes(identity)) {
+      broadcastOnScreen(identity, false);
+    }
     setParticipants(prev => prev.filter(p => p.identity !== identity));
     setSelectedIdentities(prev => {
       const next = prev.filter(id => id !== identity);
