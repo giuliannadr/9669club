@@ -12,6 +12,7 @@ import {
 const LIVEKIT_URL = import.meta.env.VITE_LIVEKIT_URL ?? '';
 
 type FilterId = 'none' | 'retro';
+type QRPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
 
 // ── Read admin metadata ───────────────────────────────────────────────────────
 const readAdminMeta = (participant: RemoteParticipant | undefined) => {
@@ -47,40 +48,71 @@ const AnimatedBg: React.FC = () => (
   </div>
 );
 
-// ── Waiting screen ────────────────────────────────────────────────────────────
-const WaitingScreen: React.FC<{ showQR: boolean; qrUrl: string }> = ({ showQR, qrUrl }) => (
-  <div className="absolute inset-0 flex flex-col items-center justify-center select-none z-10 gap-10">
-    {/* QR — only when admin has enabled it */}
-    {showQR && qrUrl && (
-      <div className="flex flex-col items-center gap-4">
-        <div className="relative">
-          <div className="absolute -inset-3 rounded-3xl bg-orange-500/20 blur-xl animate-pulse" />
-          <div className="relative bg-white p-5 rounded-3xl shadow-2xl">
-            <img src={qrUrl} alt="QR" className="w-48 h-48 block" />
-          </div>
-        </div>
-        <p className="text-white font-black text-3xl tracking-tight">
+// ── QR block — reused for any position ───────────────────────────────────────
+const QRBlock: React.FC<{ qrUrl: string; large?: boolean }> = ({ qrUrl, large = false }) => (
+  <div className={`flex flex-col items-center gap-3 ${large ? '' : ''}`}>
+    <div className="relative">
+      <div className={`absolute -inset-2 rounded-2xl bg-orange-500/20 blur-lg animate-pulse`} />
+      <div className={`relative bg-white rounded-2xl shadow-2xl ${large ? 'p-5' : 'p-3'}`}>
+        <img src={qrUrl} alt="QR" className={large ? 'w-48 h-48 block' : 'w-28 h-28 block'} />
+      </div>
+    </div>
+    {large && (
+      <>
+        <p className="text-white font-black text-3xl tracking-tight text-center">
           ESCANEÁ &amp; <span className="text-orange-500">SÉ PARTE</span>
         </p>
         <p className="text-white/30 text-sm uppercase tracking-[0.4em]">del momento</p>
-      </div>
+      </>
     )}
-
-    {/* Brand + waiting indicator */}
-    <div className="flex flex-col items-center gap-4 text-center">
-      {!showQR && (
-        <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
-          9669<span className="text-orange-500/30">.STUDIO</span>
-        </p>
-      )}
-      <div className="flex items-center gap-3 text-white/20 text-sm font-bold uppercase tracking-[0.4em]">
-        <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
-        En espera de señal
-        <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
-      </div>
-    </div>
   </div>
 );
+
+// Position → absolute CSS
+const qrPositionStyle = (pos: QRPosition): React.CSSProperties => {
+  const edge = '5%';
+  switch (pos) {
+    case 'top-left':     return { position: 'absolute', top: edge, left: edge };
+    case 'top-right':    return { position: 'absolute', top: edge, right: edge };
+    case 'bottom-left':  return { position: 'absolute', bottom: edge, left: edge };
+    case 'bottom-right': return { position: 'absolute', bottom: edge, right: edge };
+    case 'center':       return { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' };
+  }
+};
+
+// ── Waiting screen ────────────────────────────────────────────────────────────
+const WaitingScreen: React.FC<{
+  showQR: boolean;
+  qrUrl: string;
+  qrPosition: QRPosition;
+}> = ({ showQR, qrUrl, qrPosition }) => {
+  const isCenter = qrPosition === 'center';
+  return (
+    <div className="absolute inset-0 select-none z-10">
+      {/* Always-visible brand + waiting pill */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 pointer-events-none">
+        {/* Only show brand when QR is absent or in a corner (center QR replaces this) */}
+        {(!showQR || !isCenter) && (
+          <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
+            9669<span className="text-orange-500/30">.STUDIO</span>
+          </p>
+        )}
+        <div className="flex items-center gap-3 text-white/20 text-sm font-bold uppercase tracking-[0.4em]">
+          <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
+          En espera de señal
+          <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
+        </div>
+      </div>
+
+      {/* QR — positioned per admin selection */}
+      {showQR && qrUrl && (
+        <div style={qrPositionStyle(qrPosition)}>
+          <QRBlock qrUrl={qrUrl} large={isCenter} />
+        </div>
+      )}
+    </div>
+  );
+};
 
 // ── VHS glitch canvas ─────────────────────────────────────────────────────────
 // Randomly fires analog-failure artifacts: displaced bands, bright tape creases,
@@ -541,6 +573,7 @@ const StageView: React.FC = () => {
   const [partyName, setPartyName] = useState('');
   const [liveTime, setLiveTime] = useState(0);
   const [showQR, setShowQR] = useState(false);
+  const [qrPosition, setQrPosition] = useState<QRPosition>('center');
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
 
@@ -609,6 +642,7 @@ const StageView: React.FC = () => {
             }
             if (msg.type === 'SHOW_QR') {
               setShowQR(!!msg.show);
+              if (msg.position) setQrPosition(msg.position as QRPosition);
             }
           } catch { /* ignore */ }
         });
@@ -662,7 +696,7 @@ const StageView: React.FC = () => {
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
       {count === 0 && <AnimatedBg />}
-      {count === 0 && <WaitingScreen showQR={showQR} qrUrl={qrUrl} />}
+      {count === 0 && <WaitingScreen showQR={showQR} qrUrl={qrUrl} qrPosition={qrPosition} />}
 
       {/* Video grid — each slot handles its own filter + HUD */}
       {count > 0 && (

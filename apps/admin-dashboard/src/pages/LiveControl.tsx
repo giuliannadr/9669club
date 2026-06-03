@@ -12,6 +12,14 @@ import {
 } from 'lucide-react';
 
 type FilterId = 'none' | 'retro';
+type QRPosition = 'top-left' | 'top-right' | 'center' | 'bottom-left' | 'bottom-right';
+
+// 3×3 grid layout — only 5 positions are active (4 corners + center)
+const QR_GRID: ({ pos: QRPosition } | null)[][] = [
+  [{ pos: 'top-left' },    null, { pos: 'top-right' }],
+  [null,                   { pos: 'center' }, null],
+  [{ pos: 'bottom-left' }, null, { pos: 'bottom-right' }],
+];
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Room,
@@ -323,6 +331,7 @@ const LiveControl: React.FC = () => {
   const [partyName, setPartyName] = useState('');
   const [partyNameInput, setPartyNameInput] = useState('');
   const [showQROnStage, setShowQROnStage] = useState(false);
+  const [qrPosition, setQrPosition] = useState<QRPosition>('center');
 
   const roomRef = useRef<Room | null>(null);
   const selectedIdentitiesRef = useRef<string[]>([]);
@@ -356,17 +365,22 @@ const LiveControl: React.FC = () => {
     }));
   }, []);
 
-  const broadcastQR = useCallback((show: boolean) => {
+  const broadcastQR = useCallback((show: boolean, pos: QRPosition) => {
     const room = roomRef.current;
     if (!room) return;
-    const data = new TextEncoder().encode(JSON.stringify({ type: 'SHOW_QR', show }));
+    const data = new TextEncoder().encode(JSON.stringify({ type: 'SHOW_QR', show, position: pos }));
     room.localParticipant.publishData(data, { reliable: true });
   }, []);
 
   const handleToggleQR = () => {
     const next = !showQROnStage;
     setShowQROnStage(next);
-    broadcastQR(next);
+    broadcastQR(next, qrPosition);
+  };
+
+  const handleSetQRPosition = (pos: QRPosition) => {
+    setQrPosition(pos);
+    if (showQROnStage) broadcastQR(true, pos);
   };
 
   const broadcastFilter = useCallback(async (filter: FilterId, name: string) => {
@@ -410,7 +424,7 @@ const LiveControl: React.FC = () => {
                 r.localParticipant.publishData(d2, { reliable: true });
               }
               // Always rebroadcast QR state so stage is in sync
-              const d3 = new TextEncoder().encode(JSON.stringify({ type: 'SHOW_QR', show: showQROnStage }));
+              const d3 = new TextEncoder().encode(JSON.stringify({ type: 'SHOW_QR', show: showQROnStage, position: qrPosition }));
               r.localParticipant.publishData(d3, { reliable: true });
             };
             setTimeout(rebroadcast, 1000);
@@ -696,20 +710,44 @@ const LiveControl: React.FC = () => {
                   >Abrir proyector →</a>
                 </div>
               )}
-              {/* QR toggle */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-neutral-500 flex items-center gap-1.5">
-                  <QrCode className="w-3 h-3" /> QR en proyector
-                </span>
-                <button
-                  onClick={handleToggleQR}
-                  disabled={!isRoomOpen}
-                  className={`relative w-10 h-5 rounded-full transition-all duration-300 disabled:opacity-30
-                    ${showQROnStage ? 'bg-orange-500' : 'bg-neutral-700'}`}
-                >
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-300
-                    ${showQROnStage ? 'left-5' : 'left-0.5'}`} />
-                </button>
+              {/* QR toggle + position picker */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-neutral-500 flex items-center gap-1.5">
+                    <QrCode className="w-3 h-3" /> QR en proyector
+                  </span>
+                  <button
+                    onClick={handleToggleQR}
+                    disabled={!isRoomOpen}
+                    className={`relative w-10 h-5 rounded-full transition-all duration-300 disabled:opacity-30
+                      ${showQROnStage ? 'bg-orange-500' : 'bg-neutral-700'}`}
+                  >
+                    <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-300
+                      ${showQROnStage ? 'left-5' : 'left-0.5'}`} />
+                  </button>
+                </div>
+
+                {/* 3×3 position grid — always visible so admin can pre-set before enabling */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-neutral-600 uppercase tracking-wider">Posición</span>
+                  <div className="grid grid-cols-3 gap-1">
+                    {QR_GRID.map((row, ri) =>
+                      row.map((cell, ci) => cell ? (
+                        <button
+                          key={cell.pos}
+                          onClick={() => handleSetQRPosition(cell.pos)}
+                          title={cell.pos.replace('-', ' ')}
+                          className={`w-5 h-5 rounded transition-all duration-150
+                            ${qrPosition === cell.pos
+                              ? 'bg-orange-500 shadow-[0_0_6px_rgba(249,115,22,0.5)]'
+                              : 'bg-neutral-700 hover:bg-neutral-600'}`}
+                        />
+                      ) : (
+                        <div key={`e-${ri}-${ci}`} className="w-5 h-5" />
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
