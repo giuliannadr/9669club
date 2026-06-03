@@ -48,12 +48,31 @@ const AnimatedBg: React.FC = () => (
 );
 
 // ── Waiting screen ────────────────────────────────────────────────────────────
-const WaitingScreen: React.FC = () => (
-  <div className="absolute inset-0 flex flex-col items-center justify-center select-none z-10">
-    <div className="flex flex-col items-center gap-8 text-center">
-      <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
-        9669<span className="text-orange-500/30">.STUDIO</span>
-      </p>
+const WaitingScreen: React.FC<{ showQR: boolean; qrUrl: string }> = ({ showQR, qrUrl }) => (
+  <div className="absolute inset-0 flex flex-col items-center justify-center select-none z-10 gap-10">
+    {/* QR — only when admin has enabled it */}
+    {showQR && qrUrl && (
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="absolute -inset-3 rounded-3xl bg-orange-500/20 blur-xl animate-pulse" />
+          <div className="relative bg-white p-5 rounded-3xl shadow-2xl">
+            <img src={qrUrl} alt="QR" className="w-48 h-48 block" />
+          </div>
+        </div>
+        <p className="text-white font-black text-3xl tracking-tight">
+          ESCANEÁ &amp; <span className="text-orange-500">SÉ PARTE</span>
+        </p>
+        <p className="text-white/30 text-sm uppercase tracking-[0.4em]">del momento</p>
+      </div>
+    )}
+
+    {/* Brand + waiting indicator */}
+    <div className="flex flex-col items-center gap-4 text-center">
+      {!showQR && (
+        <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
+          9669<span className="text-orange-500/30">.STUDIO</span>
+        </p>
+      )}
       <div className="flex items-center gap-3 text-white/20 text-sm font-bold uppercase tracking-[0.4em]">
         <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
         En espera de señal
@@ -521,8 +540,14 @@ const StageView: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterId>('none');
   const [partyName, setPartyName] = useState('');
   const [liveTime, setLiveTime] = useState(0);
+  const [showQR, setShowQR] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
+
+  // QR points guests to the live room URL
+  const qrUrl = roomId
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(`${window.location.origin}/live/${roomId}`)}&color=0-0-0&bgcolor=FFFFFF`
+    : '';
 
   const selectedParticipants = selectedIdentities
     .map(id => participants.get(id))
@@ -582,6 +607,9 @@ const StageView: React.FC = () => {
               setActiveFilter(msg.filter === 'retro' ? 'retro' : 'none');
               setPartyName(typeof msg.partyName === 'string' ? msg.partyName : '');
             }
+            if (msg.type === 'SHOW_QR') {
+              setShowQR(!!msg.show);
+            }
           } catch { /* ignore */ }
         });
 
@@ -634,7 +662,7 @@ const StageView: React.FC = () => {
   return (
     <div className="fixed inset-0 overflow-hidden bg-black">
       {count === 0 && <AnimatedBg />}
-      {count === 0 && <WaitingScreen />}
+      {count === 0 && <WaitingScreen showQR={showQR} qrUrl={qrUrl} />}
 
       {/* Video grid — each slot handles its own filter + HUD */}
       {count > 0 && (

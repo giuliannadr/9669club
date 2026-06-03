@@ -49,6 +49,12 @@ const GuestLive: React.FC = () => {
   const [zoomMax, setZoomMax]           = useState(1);
   const [hasHardwareZoom, setHasHardwareZoom] = useState(false);
 
+  // refs for pinch-to-zoom (avoid stale closures in native event listeners)
+  const zoomRef    = useRef(1);
+  const zoomMinRef = useRef(1);
+  const zoomMaxRef = useRef(1);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
   // live state
   const [isLive, setIsLive]         = useState(false);
   const [liveTime, setLiveTime]     = useState(0);
@@ -90,10 +96,14 @@ const GuestLive: React.FC = () => {
       setHasHardwareZoom(true);
       setZoomMin(caps.zoom.min);
       setZoomMax(caps.zoom.max);
+      zoomMinRef.current = caps.zoom.min;
+      zoomMaxRef.current = caps.zoom.max;
     } else {
       setHasHardwareZoom(false);
       setZoomMin(1);
       setZoomMax(1);
+      zoomMinRef.current = 1;
+      zoomMaxRef.current = 1;
     }
   };
 
@@ -114,17 +124,24 @@ const GuestLive: React.FC = () => {
   };
 
   // ── Zoom ────────────────────────────────────────────────────────────────────
-  const applyZoom = async (value: number) => {
-    const clamped = Math.max(zoomMin, Math.min(zoomMax, value));
+  const applyZoom = useCallback(async (value: number) => {
+    const min = zoomMinRef.current;
+    const max = zoomMaxRef.current;
+    const clamped = Math.max(min, Math.min(max, value));
+    zoomRef.current = clamped;
     setZoom(clamped);
     const mst = localVideoRef.current?.mediaStreamTrack;
-    if (!mst || !hasHardwareZoom) return;
+    if (!mst) return;
     try {
       await mst.applyConstraints({ advanced: [{ zoom: clamped } as MediaTrackConstraintSet] });
     } catch { /* device doesn't support zoom */ }
-  };
+  }, []);
 
-  // Preset zoom buttons: filter to those within device range, always include 1x
+  // Keep refs in sync with state
+  useEffect(() => { zoomMinRef.current = zoomMin; }, [zoomMin]);
+  useEffect(() => { zoomMaxRef.current = zoomMax; }, [zoomMax]);
+
+  // Preset zoom buttons filtered to device range
   const zoomPresets = (() => {
     const candidates = [0.5, 1, 2, 3];
     return candidates.filter(v => {
@@ -133,6 +150,47 @@ const GuestLive: React.FC = () => {
       return v >= zoomMin && v <= zoomMax;
     });
   })();
+
+  // ── Pinch-to-zoom (native listener — passive:false to prevent page scroll) ──
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !hasPermissions) return;
+
+    let startDist: number | null = null;
+    let startZoom = 1;
+
+    const getDist = (touches: TouchList) => {
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        startDist = getDist(e.touches);
+        startZoom = zoomRef.current;
+      }
+    };
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && startDist !== null) {
+        e.preventDefault();
+        const scale = getDist(e.touches) / startDist;
+        applyZoom(startZoom * scale);
+      }
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) startDist = null;
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove',  onMove,  { passive: false });
+    el.addEventListener('touchend',   onEnd,   { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove',  onMove);
+      el.removeEventListener('touchend',   onEnd);
+    };
+  }, [hasPermissions, applyZoom]);
 
   // ── Torch ───────────────────────────────────────────────────────────────────
   const toggleTorch = async () => {
@@ -256,8 +314,8 @@ const GuestLive: React.FC = () => {
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col font-sans overflow-hidden">
 
-      {/* Camera Viewport */}
-      <div className="absolute inset-0 bg-neutral-900">
+      {/* Camera Viewport — pinch-to-zoom target */}
+      <div ref={viewportRef} className="absolute inset-0 bg-neutral-900">
         <video
           ref={videoRef}
           autoPlay playsInline muted
@@ -372,38 +430,40 @@ const GuestLive: React.FC = () => {
 
         <div className="flex-1" />
 
-        {/* ── Zoom controls ── */}
+        {/* ── Zoom controls — iPhone style ── */}
         {hasPermissions && zoomPresets.length > 1 && (
-          <div className="flex justify-center gap-2 pb-4 pointer-events-auto">
-            {zoomPresets.map(preset => (
-              <button
-                key={preset}
-                onClick={() => applyZoom(preset)}
-                className={`
-                  w-12 h-12 rounded-full font-black text-sm transition-all duration-200
-                  ${Math.abs(zoom - preset) < 0.05
-                    ? 'bg-white text-black scale-110 shadow-lg'
-                    : 'bg-black/50 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'}
-                `}
-              >
-                {preset === 0.5 ? '·5' : `${preset}×`}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── Zoom slider (when hardware zoom available and range is useful) ── */}
-        {hasPermissions && hasHardwareZoom && zoomMax > zoomMin && (
-          <div className="px-12 pb-3 pointer-events-auto">
-            <input
-              type="range"
-              min={zoomMin}
-              max={zoomMax}
-              step={0.1}
-              value={zoom}
-              onChange={e => applyZoom(Number(e.target.value))}
-              className="w-full accent-white opacity-70 hover:opacity-100 transition-opacity"
-            />
+          <div className="flex justify-center items-center gap-2 pb-5 pointer-events-auto">
+            {zoomPresets.map(preset => {
+              const active = Math.abs(zoom - preset) < 0.15;
+              return (
+                <button
+                  key={preset}
+                  onClick={() => applyZoom(preset)}
+                  style={{
+                    transition: 'all 0.18s cubic-bezier(0.34,1.56,0.64,1)',
+                    background: active
+                      ? 'rgba(0,0,0,0.72)'
+                      : 'rgba(0,0,0,0.42)',
+                    backdropFilter: 'blur(14px)',
+                    WebkitBackdropFilter: 'blur(14px)',
+                    border: active
+                      ? '1px solid rgba(255,214,0,0.35)'
+                      : '1px solid rgba(255,255,255,0.15)',
+                    transform: active ? 'scale(1.18)' : 'scale(1)',
+                  }}
+                  className="rounded-full px-3.5 py-1.5 font-bold text-sm leading-none"
+                >
+                  <span style={{ color: active ? '#FFD600' : 'rgba(255,255,255,0.88)' }}>
+                    {preset === 0.5 ? '0.5' : preset}
+                  </span>
+                  <span style={{
+                    fontSize: 10,
+                    color: active ? '#FFD600' : 'rgba(255,255,255,0.6)',
+                    marginLeft: 1,
+                  }}>×</span>
+                </button>
+              );
+            })}
           </div>
         )}
 

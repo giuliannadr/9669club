@@ -84,7 +84,7 @@ const GuestVideoCard: React.FC<{
       initial={{ opacity: 0, scale: 0.8 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }}
-      className={`group relative aspect-[16/9] rounded-2xl overflow-hidden bg-black border transition-all duration-300 cursor-pointer
+      className={`group relative aspect-[4/3] rounded-2xl overflow-hidden bg-black border transition-all duration-300 cursor-pointer
         ${isSelected ? 'border-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.35)]' : 'border-neutral-800 hover:border-neutral-600'}`}
       onClick={!disabled || isSelected ? onSelect : undefined}
     >
@@ -322,6 +322,7 @@ const LiveControl: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterId>('none');
   const [partyName, setPartyName] = useState('');
   const [partyNameInput, setPartyNameInput] = useState('');
+  const [showQROnStage, setShowQROnStage] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
   const selectedIdentitiesRef = useRef<string[]>([]);
@@ -354,6 +355,19 @@ const LiveControl: React.FC = () => {
       partyName: partyNameRef.current,
     }));
   }, []);
+
+  const broadcastQR = useCallback((show: boolean) => {
+    const room = roomRef.current;
+    if (!room) return;
+    const data = new TextEncoder().encode(JSON.stringify({ type: 'SHOW_QR', show }));
+    room.localParticipant.publishData(data, { reliable: true });
+  }, []);
+
+  const handleToggleQR = () => {
+    const next = !showQROnStage;
+    setShowQROnStage(next);
+    broadcastQR(next);
+  };
 
   const broadcastFilter = useCallback(async (filter: FilterId, name: string) => {
     const room = roomRef.current;
@@ -395,6 +409,9 @@ const LiveControl: React.FC = () => {
                 const d2 = new TextEncoder().encode(JSON.stringify({ type: 'SET_FILTER', filter: activeFilterRef.current, partyName: partyNameRef.current }));
                 r.localParticipant.publishData(d2, { reliable: true });
               }
+              // Always rebroadcast QR state so stage is in sync
+              const d3 = new TextEncoder().encode(JSON.stringify({ type: 'SHOW_QR', show: showQROnStage }));
+              r.localParticipant.publishData(d3, { reliable: true });
             };
             setTimeout(rebroadcast, 1000);
             setTimeout(rebroadcast, 2500);
@@ -679,6 +696,21 @@ const LiveControl: React.FC = () => {
                   >Abrir proyector →</a>
                 </div>
               )}
+              {/* QR toggle */}
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-neutral-500 flex items-center gap-1.5">
+                  <QrCode className="w-3 h-3" /> QR en proyector
+                </span>
+                <button
+                  onClick={handleToggleQR}
+                  disabled={!isRoomOpen}
+                  className={`relative w-10 h-5 rounded-full transition-all duration-300 disabled:opacity-30
+                    ${showQROnStage ? 'bg-orange-500' : 'bg-neutral-700'}`}
+                >
+                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-300
+                    ${showQROnStage ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -841,8 +873,8 @@ const LiveControl: React.FC = () => {
         @keyframes pvb2 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(-10%,8%) scale(1.08)} 100%{transform:translate(6%,-10%) scale(0.96)} }
         @keyframes pvb3 { 0%{transform:translate(0,0) scale(1)} 50%{transform:translate(12%,-6%) scale(1.12)} 100%{transform:translate(-8%,5%) scale(0.9)} }
 
-        /* Rotate portrait stream to fill 16:9 landscape card (guest grid) */
-        .card-video { position:absolute; top:50%; left:50%; width:56.25%; height:177.78%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
+        /* Rotate portrait stream to fill 4:3 landscape card (guest grid) */
+        .card-video { position:absolute; top:50%; left:50%; width:75%; height:133.34%; transform:translate(-50%,-50%) rotate(90deg); object-fit:cover; }
         @keyframes lcPulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
 
         .custom-scrollbar::-webkit-scrollbar { width:4px; }
