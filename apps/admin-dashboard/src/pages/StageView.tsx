@@ -80,6 +80,15 @@ const qrPositionStyle = (pos: QRPosition): React.CSSProperties => {
   }
 };
 
+const WaitingPill: React.FC<{ size?: 'sm' | 'lg' }> = ({ size = 'lg' }) => (
+  <div className={`flex items-center gap-3 text-white/20 font-bold uppercase tracking-[0.4em]
+    ${size === 'lg' ? 'text-sm' : 'text-[10px] gap-2 tracking-[0.3em]'}`}>
+    <div className={`bg-orange-500/40 rounded-full animate-pulse ${size === 'lg' ? 'w-2 h-2' : 'w-1.5 h-1.5'}`} />
+    En espera de señal
+    <div className={`bg-orange-500/40 rounded-full animate-pulse ${size === 'lg' ? 'w-2 h-2' : 'w-1.5 h-1.5'}`} />
+  </div>
+);
+
 // ── Waiting screen ────────────────────────────────────────────────────────────
 const WaitingScreen: React.FC<{
   showQR: boolean;
@@ -87,28 +96,31 @@ const WaitingScreen: React.FC<{
   qrPosition: QRPosition;
 }> = ({ showQR, qrUrl, qrPosition }) => {
   const isCenter = qrPosition === 'center';
+  const hasQR    = showQR && !!qrUrl;
+
   return (
     <div className="absolute inset-0 select-none z-10">
-      {/* Always-visible brand + waiting pill */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 pointer-events-none">
-        {/* Only show brand when QR is absent or in a corner (center QR replaces this) */}
-        {(!showQR || !isCenter) && (
-          <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
-            9669<span className="text-orange-500/30">.STUDIO</span>
-          </p>
-        )}
-        <div className="flex items-center gap-3 text-white/20 text-sm font-bold uppercase tracking-[0.4em]">
-          <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
-          En espera de señal
-          <div className="w-2 h-2 bg-orange-500/40 rounded-full animate-pulse" />
+      {hasQR && isCenter ? (
+        // ── Center QR: everything stacked together, nothing overlaps ──
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-8">
+          <QRBlock qrUrl={qrUrl} large />
+          <WaitingPill />
         </div>
-      </div>
-
-      {/* QR — positioned per admin selection */}
-      {showQR && qrUrl && (
-        <div style={qrPositionStyle(qrPosition)}>
-          <QRBlock qrUrl={qrUrl} large={isCenter} />
-        </div>
+      ) : (
+        // ── No QR or corner QR: brand + pill centered, QR anchored to corner ──
+        <>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 pointer-events-none">
+            <p className="text-white/10 font-black tracking-[0.6em] text-2xl uppercase">
+              9669<span className="text-orange-500/30">.STUDIO</span>
+            </p>
+            <WaitingPill />
+          </div>
+          {hasQR && (
+            <div style={qrPositionStyle(qrPosition)}>
+              <QRBlock qrUrl={qrUrl} large={false} />
+            </div>
+          )}
+        </>
       )}
     </div>
   );

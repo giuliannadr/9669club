@@ -293,46 +293,48 @@ const ProjectorPreview: React.FC<{
       {count === 0 ? (
         /* ── Waiting state — exact replica of StageView WaitingScreen ── */
         <div className="absolute inset-0 z-10">
-          {/* Brand + waiting pill — centered, same as StageView */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
-            {(!showQROnStage || !isCenter) && (
-              <p className="text-white/10 font-black tracking-[0.4em] text-xs uppercase">
-                9669<span className="text-orange-500/30">.STUDIO</span>
-              </p>
-            )}
-            <div className="flex items-center gap-2 text-white/20 text-[9px] font-bold uppercase tracking-[0.3em]">
-              <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
-              En espera de señal
-              <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
-            </div>
-          </div>
-
-          {/* QR — positioned exactly as on stage */}
-          {showQROnStage && qrUrl && (
-            <div style={previewQrStyle(qrPosition)}>
-              {isCenter ? (
-                /* Center: large QR + headline (scaled for preview) */
-                <div className="flex flex-col items-center gap-2">
-                  <div className="relative">
-                    <div className="absolute -inset-1.5 rounded-xl bg-orange-500/20 blur-md animate-pulse" />
-                    <div className="relative bg-white p-2 rounded-xl shadow-xl">
-                      <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
-                    </div>
-                  </div>
-                  <p className="text-white font-black text-xs tracking-tight text-center leading-tight">
-                    ESCANEÁ &amp; <span className="text-orange-500">SÉ PARTE</span>
-                  </p>
+          {showQROnStage && qrUrl && isCenter ? (
+            // Center QR: stacked column, nothing overlaps
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+              <div className="relative">
+                <div className="absolute -inset-1.5 rounded-xl bg-orange-500/20 blur-md animate-pulse" />
+                <div className="relative bg-white p-2 rounded-xl shadow-xl">
+                  <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
                 </div>
-              ) : (
-                /* Corner: small QR only */
-                <div className="relative">
-                  <div className="absolute -inset-1 rounded-lg bg-orange-500/15 blur-sm animate-pulse" />
-                  <div className="relative bg-white p-1.5 rounded-lg shadow-lg">
-                    <img src={qrUrl} alt="QR" className="w-12 h-12 block" />
+              </div>
+              <p className="text-white font-black text-xs tracking-tight text-center leading-tight">
+                ESCANEÁ &amp; <span className="text-orange-500">SÉ PARTE</span>
+              </p>
+              <div className="flex items-center gap-2 text-white/20 text-[9px] font-bold uppercase tracking-[0.3em]">
+                <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
+                En espera de señal
+                <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
+              </div>
+            </div>
+          ) : (
+            // No QR or corner QR: brand + pill centered, QR anchored to corner
+            <>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
+                <p className="text-white/10 font-black tracking-[0.4em] text-xs uppercase">
+                  9669<span className="text-orange-500/30">.STUDIO</span>
+                </p>
+                <div className="flex items-center gap-2 text-white/20 text-[9px] font-bold uppercase tracking-[0.3em]">
+                  <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
+                  En espera de señal
+                  <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
+                </div>
+              </div>
+              {showQROnStage && qrUrl && (
+                <div style={previewQrStyle(qrPosition)}>
+                  <div className="relative">
+                    <div className="absolute -inset-1 rounded-lg bg-orange-500/15 blur-sm animate-pulse" />
+                    <div className="relative bg-white p-1.5 rounded-lg shadow-lg">
+                      <img src={qrUrl} alt="QR" className="w-12 h-12 block" />
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
       ) : (
