@@ -592,8 +592,16 @@ const LiveControl: React.FC = () => {
     const num = parseInt(digits, 10);
     if (isNaN(num) || num < 1) return;
 
-    const p = participantsRef.current[num - 1]; // 1-indexed
-    if (!p) { showKbFeedback(`CAM ${num} — sin señal`); return; }
+    const total = participantsRef.current.length;
+    const p = participantsRef.current[num - 1]; // 1-indexed (cam 1 = index 0)
+    if (!p) {
+      showKbFeedback(
+        total === 0
+          ? `CAM ${num} — no hay lives conectados`
+          : `CAM ${num} — no existe · solo hay ${total} en vivo`
+      );
+      return;
+    }
 
     const current = selectedIdentitiesRef.current;
     const max     = maxStreamsRef.current;
