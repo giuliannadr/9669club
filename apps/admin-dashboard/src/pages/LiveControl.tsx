@@ -257,17 +257,33 @@ const VideoPreviewSlot: React.FC<{
   );
 };
 
-// ── Projector preview ─────────────────────────────────────────────────────────
+// ── QR position → absolute CSS (mirrors StageView exactly) ───────────────────
+const previewQrStyle = (pos: QRPosition): React.CSSProperties => {
+  const edge = '5%';
+  switch (pos) {
+    case 'top-left':     return { position: 'absolute', top: edge, left: edge, zIndex: 10 };
+    case 'top-right':    return { position: 'absolute', top: edge, right: edge, zIndex: 10 };
+    case 'bottom-left':  return { position: 'absolute', bottom: edge, left: edge, zIndex: 10 };
+    case 'bottom-right': return { position: 'absolute', bottom: edge, right: edge, zIndex: 10 };
+    case 'center':       return { position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 10 };
+  }
+};
+
+// ── Projector preview — mirrors StageView waiting screen 1:1 ─────────────────
 const ProjectorPreview: React.FC<{
   selectedParticipants: RemoteParticipant[];
   qrUrl: string;
   activeFilter: FilterId;
   partyName: string;
-}> = ({ selectedParticipants, qrUrl, activeFilter, partyName }) => {
+  showQROnStage: boolean;
+  qrPosition: QRPosition;
+}> = ({ selectedParticipants, qrUrl, activeFilter, partyName, showQROnStage, qrPosition }) => {
   const count = selectedParticipants.length;
+  const isCenter = qrPosition === 'center';
+
   return (
     <div className="relative w-full h-full rounded-[1.5rem] overflow-hidden bg-[#080808]">
-      {/* Blobs — always shown */}
+      {/* Animated blobs */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="pv-blob pv-b1" />
         <div className="pv-blob pv-b2" />
@@ -275,23 +291,52 @@ const ProjectorPreview: React.FC<{
       </div>
 
       {count === 0 ? (
-        /* Waiting state — shows QR since this is admin-only */
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center z-10">
-          {qrUrl && (
-            <div className="relative">
-              <div className="absolute -inset-2 rounded-2xl bg-orange-500/20 blur-lg animate-pulse" />
-              <div className="relative bg-white p-3 rounded-2xl shadow-xl">
-                <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
-              </div>
+        /* ── Waiting state — exact replica of StageView WaitingScreen ── */
+        <div className="absolute inset-0 z-10">
+          {/* Brand + waiting pill — centered, same as StageView */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
+            {(!showQROnStage || !isCenter) && (
+              <p className="text-white/10 font-black tracking-[0.4em] text-xs uppercase">
+                9669<span className="text-orange-500/30">.STUDIO</span>
+              </p>
+            )}
+            <div className="flex items-center gap-2 text-white/20 text-[9px] font-bold uppercase tracking-[0.3em]">
+              <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
+              En espera de señal
+              <div className="w-1.5 h-1.5 bg-orange-500/40 rounded-full animate-pulse" />
+            </div>
+          </div>
+
+          {/* QR — positioned exactly as on stage */}
+          {showQROnStage && qrUrl && (
+            <div style={previewQrStyle(qrPosition)}>
+              {isCenter ? (
+                /* Center: large QR + headline (scaled for preview) */
+                <div className="flex flex-col items-center gap-2">
+                  <div className="relative">
+                    <div className="absolute -inset-1.5 rounded-xl bg-orange-500/20 blur-md animate-pulse" />
+                    <div className="relative bg-white p-2 rounded-xl shadow-xl">
+                      <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
+                    </div>
+                  </div>
+                  <p className="text-white font-black text-xs tracking-tight text-center leading-tight">
+                    ESCANEÁ &amp; <span className="text-orange-500">SÉ PARTE</span>
+                  </p>
+                </div>
+              ) : (
+                /* Corner: small QR only */
+                <div className="relative">
+                  <div className="absolute -inset-1 rounded-lg bg-orange-500/15 blur-sm animate-pulse" />
+                  <div className="relative bg-white p-1.5 rounded-lg shadow-lg">
+                    <img src={qrUrl} alt="QR" className="w-12 h-12 block" />
+                  </div>
+                </div>
+              )}
             </div>
           )}
-          <p className="text-white font-black text-base tracking-tight leading-tight">
-            ESCANEÁ<br /><span className="text-orange-500">&amp; SÉ PARTE</span>
-          </p>
-          <p className="text-white/30 text-[9px] uppercase tracking-[0.3em]">del momento</p>
         </div>
       ) : (
-        /* Raw video grid — each slot handles its own filter overlay */
+        /* ── Video grid ── */
         <div
           className="absolute inset-0"
           style={{ display: 'flex', flexWrap: count === 4 ? 'wrap' : 'nowrap' }}
@@ -999,6 +1044,8 @@ const LiveControl: React.FC = () => {
               qrUrl={qrCodeUrl}
               activeFilter={activeFilter}
               partyName={partyName}
+              showQROnStage={showQROnStage}
+              qrPosition={qrPosition}
             />
 
             {/* Preview label */}
