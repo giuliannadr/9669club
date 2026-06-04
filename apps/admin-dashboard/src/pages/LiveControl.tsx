@@ -509,16 +509,24 @@ const LiveControl: React.FC = () => {
     const isAlreadySelected = current.includes(identity);
     let next: string[];
     if (isAlreadySelected) {
+      // Toggle off
       next = current.filter(id => id !== identity);
+      broadcastOnScreen(identity, false);
     } else if (current.length < max) {
+      // Add
       next = [...current, identity];
+      broadcastOnScreen(identity, true);
+    } else if (max === 1) {
+      // Single-slot mode: replace current with new (switch, don't block)
+      const old = current[0];
+      if (old) broadcastOnScreen(old, false);
+      next = [identity];
+      broadcastOnScreen(identity, true);
     } else {
-      return; // already at max
+      return; // multi-slot full — user must deselect first
     }
     selectedIdentitiesRef.current = next;
     setSelectedIdentities(next);
-    // Notify the guest whether they're now on screen or not
-    broadcastOnScreen(identity, !isAlreadySelected);
     try { await broadcastSelections(next); } catch { /* ignore if no room */ }
   };
 
@@ -569,7 +577,10 @@ const LiveControl: React.FC = () => {
   // Keep participantsRef in sync so keyboard handler never has stale data
   useEffect(() => { participantsRef.current = participants; }, [participants]);
 
-  // ── Keyboard switcher ────────────────────────────────────────────────────────
+  // ── Keyboard switcher (Ctrl + digits) ───────────────────────────────────────
+  // Hold Ctrl, type camera number digit by digit, release Ctrl to confirm.
+  // Example: Ctrl+1+2 → camera 12. Single digit: Ctrl+5 release → camera 5.
+
   const showKbFeedback = useCallback((msg: string) => {
     setKbFeedback(msg);
     if (kbFbTimerRef.current) clearTimeout(kbFbTimerRef.current);
@@ -577,27 +588,39 @@ const LiveControl: React.FC = () => {
   }, []);
 
   const confirmKbNumber = useCallback((digits: string) => {
+    if (!digits) return;
     const num = parseInt(digits, 10);
     if (isNaN(num) || num < 1) return;
+
     const p = participantsRef.current[num - 1]; // 1-indexed
-    if (!p) {
-      showKbFeedback(`CAM ${num} — sin señal`);
-      return;
-    }
-    const isSelected = selectedIdentitiesRef.current.includes(p.identity);
-    // handleProjectStream already manages refs + broadcast
+    if (!p) { showKbFeedback(`CAM ${num} — sin señal`); return; }
+
     const current = selectedIdentitiesRef.current;
-    const max = maxStreamsRef.current;
-    if (!isSelected && current.length >= max) {
-      showKbFeedback(`CAM ${num} — límite alcanzado (${max})`);
+    const max     = maxStreamsRef.current;
+    const isSelected = current.includes(p.identity);
+    let next: string[];
+
+    if (isSelected) {
+      // Toggle off
+      next = current.filter(id => id !== p.identity);
+      broadcastOnScreen(p.identity, false);
+    } else if (current.length < max) {
+      // Add
+      next = [...current, p.identity];
+      broadcastOnScreen(p.identity, true);
+    } else if (max === 1) {
+      // Single-slot: swap out current for new
+      const old = current[0];
+      if (old) broadcastOnScreen(old, false);
+      next = [p.identity];
+      broadcastOnScreen(p.identity, true);
+    } else {
+      showKbFeedback(`CAM ${num} — límite (${max} pantallas)`);
       return;
     }
-    const next = isSelected
-      ? current.filter(id => id !== p.identity)
-      : [...current, p.identity];
+
     selectedIdentitiesRef.current = next;
     setSelectedIdentities(next);
-    broadcastOnScreen(p.identity, !isSelected);
     broadcastSelections(next).catch(() => {});
     showKbFeedback(`CAM ${num} — ${!isSelected ? '▶ EN PANTALLA' : '✕ QUITADA'}`);
   }, [broadcastOnScreen, broadcastSelections, showKbFeedback]);
@@ -605,35 +628,22 @@ const LiveControl: React.FC = () => {
   useEffect(() => {
     if (!isRoomOpen) return;
 
-    const onKey = (e: KeyboardEvent) => {
-      // Don't capture when typing inside an input / textarea
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
       if (e.key >= '0' && e.key <= '9') {
-        setKbInput(prev => {
-          const next = prev + e.key;
-          // Reset auto-confirm debounce
-          if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
-          kbTimerRef.current = setTimeout(() => {
-            confirmKbNumber(next);
-            setKbInput('');
-          }, 650);
-          return next;
-        });
-
-      } else if (e.key === 'Enter') {
-        if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
-        setKbInput(prev => { confirmKbNumber(prev); return ''; });
+        e.preventDefault(); // block browser Ctrl+1…9 tab shortcuts
+        setKbInput(prev => prev + e.key);
 
       } else if (e.key === 'Backspace') {
-        if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
+        e.preventDefault();
         setKbInput(prev => prev.slice(0, -1));
 
       } else if (e.key === 'Escape') {
-        if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
+        e.preventDefault();
         setKbInput('');
-        // Deselect all
         const prev = selectedIdentitiesRef.current;
         prev.forEach(id => broadcastOnScreen(id, false));
         selectedIdentitiesRef.current = [];
@@ -643,8 +653,19 @@ const LiveControl: React.FC = () => {
       }
     };
 
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // Release Ctrl → confirm whatever was typed
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        setKbInput(prev => { confirmKbNumber(prev); return ''; });
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup',   onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup',   onKeyUp);
+    };
   }, [isRoomOpen, confirmKbNumber, broadcastOnScreen, broadcastSelections, showKbFeedback]);
 
   const selectedParticipants = participants.filter(p => selectedIdentities.includes(p.identity))
@@ -690,15 +711,18 @@ const LiveControl: React.FC = () => {
             <div className="flex items-center gap-4 bg-black/90 backdrop-blur-xl border border-white/10 px-6 py-3.5 rounded-2xl shadow-2xl">
               {kbInput ? (
                 <>
-                  <div className="text-neutral-500 text-xs font-black uppercase tracking-widest">CAM</div>
+                  <div className="flex items-center gap-1 text-neutral-500">
+                    <span className="text-[10px] font-black uppercase tracking-widest border border-neutral-700 rounded px-1 py-0.5">Ctrl</span>
+                    <span className="text-neutral-700">+</span>
+                  </div>
                   <div className="text-white text-4xl font-black font-mono leading-none tracking-wider min-w-[2ch] text-center">
                     {kbInput}
                     <span className="inline-block w-0.5 h-8 bg-orange-500 ml-1 align-middle animate-pulse" />
                   </div>
                   <div className="flex flex-col gap-0.5 text-[10px] text-neutral-600 font-bold">
-                    <span>↵ confirmar</span>
-                    <span>⌫ borrar</span>
-                    <span>Esc cancelar</span>
+                    <span>soltar Ctrl → confirmar</span>
+                    <span>Ctrl+⌫ → borrar</span>
+                    <span>Ctrl+Esc → limpiar todo</span>
                   </div>
                 </>
               ) : (
