@@ -345,7 +345,6 @@ const LiveControl: React.FC = () => {
   // ── Keyboard switcher state ──
   const [kbInput, setKbInput] = useState('');         // digits typed so far
   const [kbFeedback, setKbFeedback] = useState('');   // brief "CAM 5 → ON/OFF" feedback
-  const kbTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const kbFbTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const participantsRef = useRef<RemoteParticipant[]>([]); // avoid stale closure in keydown
 
