@@ -124,7 +124,10 @@ const GuestVideoCard: React.FC<{
       </div>
 
       <div className="absolute bottom-3 left-3 right-3 flex flex-col gap-2">
-        <p className="text-[10px] font-bold text-white truncate drop-shadow-md">Cámara {index + 1}</p>
+        <p className="text-[10px] font-bold text-white truncate drop-shadow-md flex items-center gap-1.5">
+          <span className="bg-white/10 border border-white/20 text-white/70 font-black px-1.5 rounded text-[9px] font-mono">{index + 1}</span>
+          Cámara {index + 1}
+        </p>
         <div className="flex gap-2">
           <button
             onClick={e => { e.stopPropagation(); if (!disabled || isSelected) onSelect(); }}
@@ -338,6 +341,13 @@ const LiveControl: React.FC = () => {
   const maxStreamsRef = useRef(2);
   const activeFilterRef = useRef<FilterId>('none');
   const partyNameRef = useRef('');
+
+  // ── Keyboard switcher state ──
+  const [kbInput, setKbInput] = useState('');         // digits typed so far
+  const [kbFeedback, setKbFeedback] = useState('');   // brief "CAM 5 → ON/OFF" feedback
+  const kbTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const kbFbTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const participantsRef = useRef<RemoteParticipant[]>([]); // avoid stale closure in keydown
 
   const isLocalhost = typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
@@ -556,6 +566,87 @@ const LiveControl: React.FC = () => {
 
   useEffect(() => { return () => { roomRef.current?.disconnect(); }; }, []);
 
+  // Keep participantsRef in sync so keyboard handler never has stale data
+  useEffect(() => { participantsRef.current = participants; }, [participants]);
+
+  // ── Keyboard switcher ────────────────────────────────────────────────────────
+  const showKbFeedback = useCallback((msg: string) => {
+    setKbFeedback(msg);
+    if (kbFbTimerRef.current) clearTimeout(kbFbTimerRef.current);
+    kbFbTimerRef.current = setTimeout(() => setKbFeedback(''), 1800);
+  }, []);
+
+  const confirmKbNumber = useCallback((digits: string) => {
+    const num = parseInt(digits, 10);
+    if (isNaN(num) || num < 1) return;
+    const p = participantsRef.current[num - 1]; // 1-indexed
+    if (!p) {
+      showKbFeedback(`CAM ${num} — sin señal`);
+      return;
+    }
+    const isSelected = selectedIdentitiesRef.current.includes(p.identity);
+    // handleProjectStream already manages refs + broadcast
+    const current = selectedIdentitiesRef.current;
+    const max = maxStreamsRef.current;
+    if (!isSelected && current.length >= max) {
+      showKbFeedback(`CAM ${num} — límite alcanzado (${max})`);
+      return;
+    }
+    const next = isSelected
+      ? current.filter(id => id !== p.identity)
+      : [...current, p.identity];
+    selectedIdentitiesRef.current = next;
+    setSelectedIdentities(next);
+    broadcastOnScreen(p.identity, !isSelected);
+    broadcastSelections(next).catch(() => {});
+    showKbFeedback(`CAM ${num} — ${!isSelected ? '▶ EN PANTALLA' : '✕ QUITADA'}`);
+  }, [broadcastOnScreen, broadcastSelections, showKbFeedback]);
+
+  useEffect(() => {
+    if (!isRoomOpen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      // Don't capture when typing inside an input / textarea
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      if (e.key >= '0' && e.key <= '9') {
+        setKbInput(prev => {
+          const next = prev + e.key;
+          // Reset auto-confirm debounce
+          if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
+          kbTimerRef.current = setTimeout(() => {
+            confirmKbNumber(next);
+            setKbInput('');
+          }, 650);
+          return next;
+        });
+
+      } else if (e.key === 'Enter') {
+        if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
+        setKbInput(prev => { confirmKbNumber(prev); return ''; });
+
+      } else if (e.key === 'Backspace') {
+        if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
+        setKbInput(prev => prev.slice(0, -1));
+
+      } else if (e.key === 'Escape') {
+        if (kbTimerRef.current) clearTimeout(kbTimerRef.current);
+        setKbInput('');
+        // Deselect all
+        const prev = selectedIdentitiesRef.current;
+        prev.forEach(id => broadcastOnScreen(id, false));
+        selectedIdentitiesRef.current = [];
+        setSelectedIdentities([]);
+        broadcastSelections([]).catch(() => {});
+        showKbFeedback('✕ Todo despejado');
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isRoomOpen, confirmKbNumber, broadcastOnScreen, broadcastSelections, showKbFeedback]);
+
   const selectedParticipants = participants.filter(p => selectedIdentities.includes(p.identity))
     .sort((a, b) => selectedIdentities.indexOf(a.identity) - selectedIdentities.indexOf(b.identity));
 
@@ -581,6 +672,43 @@ const LiveControl: React.FC = () => {
             </div>
             <p className="text-white mt-12 text-3xl font-black tracking-widest uppercase">Escanea para unirte</p>
             <p className="text-neutral-400 mt-2 text-xl">SALA: {roomId?.split('_')[1]}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Keyboard switcher HUD ── */}
+      <AnimatePresence>
+        {(kbInput || kbFeedback) && (
+          <motion.div
+            key="kb-hud"
+            initial={{ opacity: 0, y: 16, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0,  scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.97 }}
+            transition={{ duration: 0.15 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+          >
+            <div className="flex items-center gap-4 bg-black/90 backdrop-blur-xl border border-white/10 px-6 py-3.5 rounded-2xl shadow-2xl">
+              {kbInput ? (
+                <>
+                  <div className="text-neutral-500 text-xs font-black uppercase tracking-widest">CAM</div>
+                  <div className="text-white text-4xl font-black font-mono leading-none tracking-wider min-w-[2ch] text-center">
+                    {kbInput}
+                    <span className="inline-block w-0.5 h-8 bg-orange-500 ml-1 align-middle animate-pulse" />
+                  </div>
+                  <div className="flex flex-col gap-0.5 text-[10px] text-neutral-600 font-bold">
+                    <span>↵ confirmar</span>
+                    <span>⌫ borrar</span>
+                    <span>Esc cancelar</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 text-sm font-bold text-neutral-300">
+                  <span className={kbFeedback.includes('EN PANTALLA') ? 'text-orange-400' : kbFeedback.includes('✕') ? 'text-neutral-400' : 'text-rose-400'}>
+                    {kbFeedback}
+                  </span>
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
