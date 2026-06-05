@@ -726,6 +726,13 @@ const StageView: React.FC = () => {
         </div>
       )}
 
+      {/* QR overlay — always visible when enabled, even while streaming */}
+      {count > 0 && showQR && qrUrl && (
+        <div style={{ ...qrPositionStyle(qrPosition), zIndex: 30 }}>
+          <QRBlock qrUrl={qrUrl} large={qrPosition === 'center'} />
+        </div>
+      )}
+
       <style>{`
         .blob { position:absolute; border-radius:50%; filter:blur(100px); opacity:0.18; will-change:transform; }
         .blob-1 { width:700px; height:700px; background:radial-gradient(circle,#f97316,transparent 70%); top:-10%; left:-10%; animation:blob1 18s ease-in-out infinite alternate; }

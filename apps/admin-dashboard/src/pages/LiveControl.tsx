@@ -355,6 +355,32 @@ const ProjectorPreview: React.FC<{
         </div>
       )}
 
+      {/* QR overlay on top of video — always visible when enabled */}
+      {count > 0 && showQROnStage && qrUrl && (
+        <div style={{ ...previewQrStyle(qrPosition), zIndex: 25 }}>
+          {isCenter ? (
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="relative">
+                <div className="absolute -inset-1.5 rounded-xl bg-orange-500/20 blur-md animate-pulse" />
+                <div className="relative bg-white p-2 rounded-xl shadow-xl">
+                  <img src={qrUrl} alt="QR" className="w-20 h-20 block" />
+                </div>
+              </div>
+              <p className="text-white font-black text-xs tracking-tight text-center leading-tight drop-shadow-lg">
+                ESCANEÁ &amp; <span className="text-orange-500">SÉ PARTE</span>
+              </p>
+            </div>
+          ) : (
+            <div className="relative">
+              <div className="absolute -inset-1 rounded-lg bg-orange-500/15 blur-sm animate-pulse" />
+              <div className="relative bg-white p-1.5 rounded-lg shadow-lg">
+                <img src={qrUrl} alt="QR" className="w-12 h-12 block" />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ON AIR badge */}
       {count > 0 && (
         <div className="absolute top-3 left-3 z-20">
